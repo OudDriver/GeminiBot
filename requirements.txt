@@ -1,0 +1,5 @@
+discord.py
+google
+google.api_core
+google.generativeai
+pytube

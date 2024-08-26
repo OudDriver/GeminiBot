@@ -23,7 +23,6 @@ SAFETY_SETTINGS = {
 }
 
 def prompt(model: genai.GenerativeModel):
-    chatSession = model.start_chat(enable_automatic_function_calling=True)
     @commands.command(name="prompt")
     async def command(ctx: commands.Context, *, message: str):
         """
@@ -58,7 +57,9 @@ def prompt(model: genai.GenerativeModel):
                 await handleYoutube(link)
 
             async def handleAttachment(attachment):
-                fileName = generateUniqueFileName(attachment.filename.split('.')[-1])
+                file_extension = attachment.filename.split(".")[-1]
+                unique_file_name = generateUniqueFileName(file_extension)
+                fileName = f"./temp/{unique_file_name}"
 
                 await attachment.save(fileName)
                 logging.info(f"Saved {attachment.content_type.split('/')[0]} {fileName}")
@@ -83,30 +84,22 @@ def prompt(model: genai.GenerativeModel):
             
             response = None  # Initialize the response variable
             
-            response = chatSession.send_message(finalPrompt, safety_settings=SAFETY_SETTINGS)
+            response = model.generate_content(finalPrompt, safety_settings=SAFETY_SETTINGS)
             logging.info(f"Got Response.\n{response}")
             text = response.text
             cleanedText = makeOutputWithCodeExecutionCleaner(text)
             
             await sendLongMessage(ctx, cleanedText, MAX_MESSAGE_LENGTH)
             
-        except ssl.SSLEOFError:
-            errorMessage = traceback.format_exc()
-            errorMessage += " Try your request again!"
+        except ssl.SSLEOFError as e:
+            errorMessage = f"{e}!\nPerhaps, you can try your request again!"
             logging.exception(f"Error: {errorMessage}")
             await sendLongMessage(ctx, errorMessage, MAX_MESSAGE_LENGTH)
             
-        except google.api_core.exceptions.InvalidArgument as e:
-            logging.exception(f"Error: {e}")
-            await ctx.send(e)
-            
-        except google.api_core.exceptions.PermissionDenied as e:
-            logging.exception(f"Error: {e}")
-            await ctx.send(e)
-            
-        except Exception as e:
+        except Exception:
             errorMessage = traceback.format_exc()
-            errorMessage += f"\nPerhaps this error is caused by bad safety ratings:\n{response.candidates[3]}"
+            if response.candidates:
+                errorMessage += f"\nPerhaps this error is caused by bad safety ratings:\n{response.candidates[3]}"
             logging.exception(f"Error: {errorMessage}")
             await sendLongMessage(ctx, errorMessage, MAX_MESSAGE_LENGTH)
 

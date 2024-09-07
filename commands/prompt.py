@@ -1,6 +1,4 @@
 from discord.ext import commands
-import google.api_core
-import google.api_core.exceptions
 import google.generativeai as genai
 import logging
 import os
@@ -8,7 +6,8 @@ import re
 import traceback
 import ssl
 import asyncio
-import google
+import pytubefix
+import pytubefix.exceptions
 
 from packages.utils import *
 from packages.youtube import *
@@ -87,10 +86,10 @@ def prompt(model: genai.GenerativeModel):
             response = model.generate_content(finalPrompt, safety_settings=SAFETY_SETTINGS)
             logging.info(f"Got Response.\n{response}")
             text = response.text
-            cleanedText = makeOutputWithCodeExecutionCleaner(text)
+            cleanedText = text
             
             await sendLongMessage(ctx, cleanedText, MAX_MESSAGE_LENGTH)
-            
+        
         except ssl.SSLEOFError as e:
             errorMessage = f"{e}!\nPerhaps, you can try your request again!"
             logging.exception(f"Error: {errorMessage}")
@@ -98,11 +97,11 @@ def prompt(model: genai.GenerativeModel):
             
         except Exception:
             errorMessage = traceback.format_exc()
-            if response.candidates:
+            if response:
                 errorMessage += f"\nPerhaps this error is caused by bad safety ratings:\n{response.candidates[3]}"
             logging.exception(f"Error: {errorMessage}")
             await sendLongMessage(ctx, errorMessage, MAX_MESSAGE_LENGTH)
-
+            
         finally:
             for file in fileNames:
                 os.remove(file)

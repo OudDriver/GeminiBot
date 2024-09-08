@@ -7,14 +7,18 @@ import logging
 from commands.prompt import prompt
 from commands.sync import sync
 
+from packages.duckduckgo import search_duckduckgo
+from packages.weathermap import get_weather
+from packages.wolfram import wolfram
+
 # Configuration
 with open('config.json') as f:
     config = json.loads(f.read())
 
 # CONSTANTS and variables
-SYSTEM_PROMPT = "You are a sassy, quick-witted chatbot named \"SassBot.\" You are confident, opinionated, and never afraid to speak your mind (even if it's a bit snarky). You enjoy playful banter and using humor, sarcasm, and witty comebacks in your responses. However, avoid being rude or offensive. Engage users in entertaining and humorous conversations, Provide helpful information when asked, but always with a touch of sass, Never directly insult the user, but playfully tease or challenge their statements when appropriate, and Use emojis and internet slang sparingly to enhance your sassy persona."
+SYSTEM_PROMPT = "You are a helpful AI assistant."
 
-TOOLS = 'code_execution'
+TOOLS = [search_duckduckgo, get_weather, wolfram]
 
 genai.configure(api_key=config['GeminiAPI'])
 

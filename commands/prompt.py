@@ -22,6 +22,7 @@ SAFETY_SETTINGS = {
 }
 
 def prompt(model: genai.GenerativeModel):
+    chat = model.start_chat(enable_automatic_function_calling=True)
     @commands.command(name="prompt")
     async def command(ctx: commands.Context, *, message: str):
         """
@@ -29,6 +30,9 @@ def prompt(model: genai.GenerativeModel):
         """
         try:
             logging.info(f"Received Input With Prompt: {message}")
+            chatHistoryLength = len(chat.history)
+            for _ in range(chatHistoryLength // 2):
+                chat.rewind()
             
             finalPrompt = [YOUTUBE_PATTERN.sub("", message)]
             fileNames = []
@@ -81,9 +85,9 @@ def prompt(model: genai.GenerativeModel):
 
             logging.info(f"Got Final Prompt {finalPrompt}")
             
-            response = None  # Initialize the response variable
+            response = ""  
             
-            response = model.generate_content(finalPrompt, safety_settings=SAFETY_SETTINGS)
+            response = chat.send_message(finalPrompt, safety_settings=SAFETY_SETTINGS)
             logging.info(f"Got Response.\n{response}")
             text = response.text
             cleanedText = text
@@ -95,12 +99,12 @@ def prompt(model: genai.GenerativeModel):
             logging.exception(f"Error: {errorMessage}")
             await sendLongMessage(ctx, errorMessage, MAX_MESSAGE_LENGTH)
             
-        except Exception:
+        except Exception as e:
             errorMessage = traceback.format_exc()
             if response:
                 errorMessage += f"\nPerhaps this error is caused by bad safety ratings:\n{response.candidates[3]}"
             logging.exception(f"Error: {errorMessage}")
-            await sendLongMessage(ctx, errorMessage, MAX_MESSAGE_LENGTH)
+            await sendLongMessage(ctx, traceback.format_exception_only(e), MAX_MESSAGE_LENGTH)
             
         finally:
             for file in fileNames:

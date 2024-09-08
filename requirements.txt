@@ -3,3 +3,7 @@ google
 google.api_core
 google.generativeai
 pytube
+duckduckgo_search==6.1.7
+beautifulsoup4==4.12.3
+python-weather
+wolframalpha

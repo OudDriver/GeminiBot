@@ -14,7 +14,7 @@ def generateUniqueFileName(extension):
 async def sendLongMessage(ctx, message, length):
     """Sends a long message in chunks."""
     for i in range(0, len(message), length):
-        await ctx.send(message[i:i + length])
+        await ctx.reply(message[i:i + length])
         
 def makeOutputWithCodeExecutionCleaner(text: str):
     if re.search(r"``` (.*)\n([\s\S]+.*)```", text):

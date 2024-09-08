@@ -78,7 +78,11 @@ def prompt(model: genai.GenerativeModel):
                     logging.info(f"{genai.get_file(uploadedFile.name).display_name} is active at server")
                     finalPrompt.append(uploadedFile)
 
-            finalPrompt.insert(0, f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id}: ")
+            if ctx.message.reference:
+                finalPrompt.insert(0, f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id} Replied To \"{await ctx.channel.fetch_message(ctx.message.reference.message_id)}\": ")
+            else:
+                finalPrompt.insert(0, f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id}: ")
+                
             logging.info(f"Got Final Prompt {finalPrompt}")
             
             response = chat.send_message(finalPrompt, safety_settings=SAFETY_SETTINGS)

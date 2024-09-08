@@ -2,7 +2,7 @@ import requests
 from duckduckgo_search import DDGS
 from bs4 import BeautifulSoup
 
-def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = True, regular_search_queries: bool = True, get_website_content: bool = True) -> list[dict]:
+def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = True, regular_search_queries: bool = True, get_website_content: bool = False) -> list[dict]:
     """Searches DuckDuckGo for a given query and returns a list of results.
 
     Args:
@@ -12,7 +12,7 @@ def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = 
                          If an instant answer is found, only the instant answer is returned. Either this or instant_answers must be True. Both can be True.
         regular_search_queries: Whether to perform a regular search if no instant answer is found.
         get_website_content: Whether to fetch the content of each website in the search results.
-                             Recommended for more details. Set this value to false if not needed.
+                             Recommended for more details. Set this value to True if needed.
 
     Returns:
         A list of dictionaries, where each dictionary represents a search result. 

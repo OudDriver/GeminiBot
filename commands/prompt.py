@@ -6,8 +6,6 @@ import re
 import traceback
 import ssl
 import asyncio
-import pytubefix
-import pytubefix.exceptions
 
 from packages.utils import *
 from packages.youtube import *
@@ -30,9 +28,6 @@ def prompt(model: genai.GenerativeModel):
         """
         try:
             logging.info(f"Received Input With Prompt: {message}")
-            chatHistoryLength = len(chat.history)
-            for _ in range(chatHistoryLength // 2):
-                chat.rewind()
             
             finalPrompt = [YOUTUBE_PATTERN.sub("", message)]
             fileNames = []
@@ -83,9 +78,8 @@ def prompt(model: genai.GenerativeModel):
                     logging.info(f"{genai.get_file(uploadedFile.name).display_name} is active at server")
                     finalPrompt.append(uploadedFile)
 
+            finalPrompt.insert(0, f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id}: ")
             logging.info(f"Got Final Prompt {finalPrompt}")
-            
-            response = ""  
             
             response = chat.send_message(finalPrompt, safety_settings=SAFETY_SETTINGS)
             logging.info(f"Got Response.\n{response}")

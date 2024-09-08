@@ -1,6 +1,7 @@
 import python_weather
 import asyncio
 import nest_asyncio
+import logging
 
 nest_asyncio.apply()
 
@@ -29,7 +30,7 @@ def get_weather(city: str):
             output += "Pressure: " + str(weather.pressure) + " mbar\n"
             output += "Country: " + str(weather.country)
             
-            print(output)
+            logging.info(output)
             return output
 
     try:

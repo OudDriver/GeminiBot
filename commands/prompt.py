@@ -27,6 +27,14 @@ def prompt(model: genai.GenerativeModel):
         Generates text based on a given message and optional image, video, audio attachments. Also supports YouTube link.
         """
         try:
+            if message.lower() == "{clear}":
+                for _ in range(len(chat.history) // 2):
+                    chat.rewind()
+                    
+                print(chat.history)
+                await ctx.reply("Alrighty, I have cleared my context. What are we gonna talk about?")
+                return
+            
             logging.info(f"Received Input With Prompt: {message}")
             
             finalPrompt = [YOUTUBE_PATTERN.sub("", message)]
@@ -79,7 +87,8 @@ def prompt(model: genai.GenerativeModel):
                     finalPrompt.append(uploadedFile)
 
             if ctx.message.reference:
-                finalPrompt.insert(0, f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id} Replied To \"{await ctx.channel.fetch_message(ctx.message.reference.message_id)}\": ")
+                reply = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+                finalPrompt.insert(0, f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id} Replied To \"{reply.content}\": ")
             else:
                 finalPrompt.insert(0, f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id}: ")
                 
@@ -99,17 +108,26 @@ def prompt(model: genai.GenerativeModel):
             
         except Exception as e:
             errorMessage = traceback.format_exc()
-            if response:
-                errorMessage += f"\nPerhaps this error is caused by bad safety ratings:\n{response.candidates[3]}"
+            try:
+                if response:
+                    errorMessage += f"\nPerhaps this error is caused by bad safety ratings:\n{response.candidates[3]}"
+            except:
+                pass
             logging.exception(f"Error: {errorMessage}")
             await sendLongMessage(ctx, traceback.format_exception_only(e), MAX_MESSAGE_LENGTH)
-            
+
         finally:
-            for file in fileNames:
-                os.remove(file)
-                logging.info(f"Deleted {os.path.basename(file)} at local server")
-            for uploadedFile in uploadedFiles:
-                logging.info(f"Deleted {uploadedFile.name} at Google server")
-                await asyncio.to_thread(genai.delete_file, uploadedFile.name)
+            """
+            try:
+                for file in fileNames:
+                    os.remove(file)
+                    logging.info(f"Deleted {os.path.basename(file)} at local server")
+                for uploadedFile in uploadedFiles:
+                    logging.info(f"Deleted {uploadedFile.name} at Google server")
+                    await asyncio.to_thread(genai.delete_file, uploadedFile.name)
+            except Exception as e:
+                pass
+            """
+
 
     return command

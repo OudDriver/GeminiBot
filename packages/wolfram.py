@@ -1,5 +1,6 @@
 import json
 import wolframalpha
+import logging
 
 def wolfram(query: str):
     """
@@ -18,5 +19,5 @@ def wolfram(query: str):
     res = client.query(query)
     result = next(res.results).text
     
-    print(result)
+    logging.info(result)
     return result

@@ -1,6 +1,7 @@
 import requests
 from duckduckgo_search import DDGS
 from bs4 import BeautifulSoup
+import logging
 
 def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = True, regular_search_queries: bool = True, get_website_content: bool = False) -> list[dict]:
     """Searches DuckDuckGo for a given query and returns a list of results.
@@ -44,7 +45,7 @@ def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = 
             answer_dict.pop('topic', None)
             answer_dict.pop('text', None)
             answer_dict.pop('url', None)
-            print(answer_dict)
+            logging.info(answer_dict)
             return [answer_dict]
         elif regular_search_queries:
             results = []
@@ -52,7 +53,7 @@ def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = 
                 if get_website_content:
                     result["body"] = get_webpage_content(result["href"])
                 results.append(result)
-            print(results)
+            logging.info(results)
             return results
         else:
             return "One of ('instant_answers', 'regular_search_queries') must be True"

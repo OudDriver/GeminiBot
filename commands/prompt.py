@@ -105,16 +105,15 @@ def prompt(model: genai.GenerativeModel):
             errorMessage = f"{e}!\nPerhaps, you can try your request again!"
             logging.exception(f"Error: {errorMessage}")
             await sendLongMessage(ctx, errorMessage, MAX_MESSAGE_LENGTH)
+        
+        except genai.types.StopCandidateException as e:
+            logging.exception(e)
+            await sendLongMessage(ctx, f"```\n{traceback.format_exception_only(e)[0].replace(r'\n', '\n')}```", MAX_MESSAGE_LENGTH)
             
         except Exception as e:
             errorMessage = traceback.format_exc()
-            try:
-                if response:
-                    errorMessage += f"\nPerhaps this error is caused by bad safety ratings:\n{response.candidates[3]}"
-            except:
-                pass
             logging.exception(f"Error: {errorMessage}")
-            await sendLongMessage(ctx, traceback.format_exception_only(e), MAX_MESSAGE_LENGTH)
+            await sendLongMessage(ctx, traceback.format_exception_only(e)[0], MAX_MESSAGE_LENGTH)
 
         finally:
             """

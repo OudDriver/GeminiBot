@@ -2,8 +2,9 @@ discord.py
 google
 google.api_core
 google.generativeai
-pytube
+pytubefix
 duckduckgo_search
 beautifulsoup4
 python-weather
 wolframalpha
+nest_asyncio

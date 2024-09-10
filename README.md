@@ -1,8 +1,8 @@
-# GeminiBot
+# GeminiBot: Unleash the Power of Gemini in Discord! 
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) 
 
-A Gemini LLM implementation in Discord. 
+**Get ready to experience the (sassy) AI assistant at Discord!** GeminiBot brings Gemini LLM by Google right into your Discord server.  It's not just text; we're talking audio, video, and even YouTube!  
 
 ## Table of Contents
 
@@ -12,91 +12,100 @@ A Gemini LLM implementation in Discord.
     - [Windows](#windows)
     - [MacOS](#macos)
     - [Linux](#linux)
+- [API Keys](#api-keys)
+    - [Gemini API](#gemini-api)
+    - [Wolfram|Alpha API](#wolframalpha-api)
 
 ## About
 
-This project is a cool implementation of the Gemini LLM by Google in Discord. It supports audio, video, and audio inputs. Check [https://ai.google.dev/gemini-api/docs/prompting_with_media?lang=python#supported_file_formats](https://ai.google.dev/gemini-api/docs/prompting_with_media?lang=python#supported_file_formats) for supported file formats. 
+This project is your implementation of the Gemini LLM in discord. Think of it as a (rather dumb) AI that can understand and respond to your request.  
 
-It also supports YouTube videos input. It uses the `pytube` to download the video and audio seperately (due to a constraint in the package) and uses `ffmpeg` to combine those two. Then, it sends it to the the Gemini API server. Using the uploaded fiels in the Gemini API server, the bot will prompt Gemini the text you submitted and the video (with audio... hopefully).
-## Getting Started
+**Here's what makes GeminiBot special:**
 
-Clone this repo to your machine with python installed. This projects need FFmpeg. Refer to [Installing FFmpeg](#installing-ffmpeg) to get started on that. After that, run
-```bash
-pip install -r requirements.txt
-```
-This ensures that all dependencies are installed correctly.
+* **Multimodality:**  Give it audio, video, or even YouTube links! Gemini can process it all (check out the supported file formats here: [https://ai.google.dev/gemini-api/docs/prompting_with_media?lang=python#supported_file_formats](https://ai.google.dev/gemini-api/docs/prompting_with_media?lang=python#supported_file_formats)). 
+* **YouTube Magic:** Want Gemini to analyze a YouTube video? No problem! I use some big brain tricks with `pytubefix` and `ffmpeg` to make things work. Turns out, I can't use `pytube` because that failed miserably.
+* **Wolfram Alpha Integration:** Tired of LLM messing up your math problems? This bot can use the power of Wolfram Alpha for accurate and reliable calculations. It can even give you the steps (If you are lucky).
 
-Make a `config.json` file at the directory of your bot. It should consists of
-- `GeminiAPI`: Your API key for Gemini API
-- `DiscordToken`: Your Discord bot token
-- `OwnerID`: Your Owner ID
+## Getting Started: Your AI Adventure Begins!
 
-
-Then, start the bot using
-```bash
-python bot.py
-```
-at the bot working directory. 
+1. **Clone the Repo:**  Grab the code and bring it to your machine (make sure you have Python installed). 
+2. **FFmpeg is Your Image Friend:** This project needs FFmpeg to handle all the cool media stuff. Don't worry, I've got instructions in the [Installing FFmpeg](#installing-ffmpeg) section. 
+3. **Install Dependencies:**  Make sure everything works smoothly by installing the necessary packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. **Configure Your Bot:** Rename `config.example.json` to `config.json` and fill in your bot's details (API keys, etc.). 
+5. **Launch GeminiBot!**  From your bot's directory, run:
+   ```bash
+   python bot.py
+   ```
+   **And that's it!** You're ready to unleash the power of Gemini in your Discord server.
 
 ## Installing FFmpeg
 
 ### Windows
 
-If you have Chocolatey or Winget, you are in luck! Just run
+**Easy Mode (Chocolatey or Winget):** 
+If you have Chocolatey or Winget, you're in for a treat! Just run:
+
 ```bash
-choco install ffmpeg-full
+choco install ffmpeg-full 
 ```
-or
+
+or 
+
 ```bash
 winget install ffmpeg
 ```
-And skip the hassle of doing it manually! Or else, just follow the instructions below.
 
-1. **Download:** Go to [https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z](https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z) for a direct download of the latest FFmpeg version. Make sure you have an app that can extract 7z files (e.g., 7zip).
-2. **Extract:** Extract the downloaded zip file to a location of your choice (e.g., `C:\ffmpeg`).
-3. **Add to PATH:** 
-    1. Open the Start menu and search for "environment variables".
+**Hard Mode:**
+1. **Download:** Head over to [https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z](https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z) to download the latest FFmpeg (make sure you have a 7z extractor like 7zip).
+2. **Extract:**  Extract the files to a location of your choice (e.g., `C:\ffmpeg`).
+3. **Add to PATH:**
+    1. Search for "environment variables" in the Start menu.
     2. Select "Edit environment variables for your account".
-    3. In the "User variables for {user}" section, find the "Path" variable and click "Edit...".
-    4. Click "New" inside teh "Edit enviroment table" window and add the path to your FFmpeg `bin` folder (e.g., `C:\ffmpeg\bin`).
-    5. Click "OK" on all open windows to save the changes.
-4. **Verify:** Open a new command prompt (cmd) or powershell and type `ffmpeg -version`. If the installation was successful, you'll see the FFmpeg version information.
+    3. Find the "Path" variable in the "User variables" section and click "Edit...".
+    4. Click "New" and add the path to your FFmpeg `bin` folder (e.g., `C:\ffmpeg\bin`).
+    5. Click "OK" on all open windows to save.
+4. **Verify:** Open a new command prompt (cmd) or PowerShell and type `ffmpeg -version`. You should see the FFmpeg version information. 
 
 ### MacOS
 
-1. **Install Homebrew (if you haven't already):** 
-    * Open Terminal and paste the following command:
-    ```bash
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    ```
-    * Follow the on-screen instructions.
-2. **Install FFmpeg:** Run the following command in Terminal:
-    ```bash
-    brew install ffmpeg
-    ```
+1. **Install Homebrew (if you don't have it):**
+   ```bash
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" 
+   ```
+2. **Install FFmpeg:**
+   ```bash
+   brew install ffmpeg 
+   ```
 3. **Verify:** Type `ffmpeg -version` in Terminal. 
 
 ### Linux
 
-Most Linux distributions have FFmpeg available in their package repositories. You can install it using your distribution's package manager. For example:
+Most Linux distributions make it super easy! Use your package manager:
 
 **Ubuntu/Debian:**
-
 ```bash
 sudo apt update
 sudo apt install ffmpeg
 ```
 
 **Fedora/CentOS/RHEL:**
-
 ```bash
 sudo dnf install ffmpeg
 ```
 
 **Arch Linux:**
-
 ```bash
-sudo pacman -S ffmpeg
+sudo pacman -S ffmpeg 
 ```
 
-**Verify:** After installation, type `ffmpeg -version` in your terminal to verify. 
+**Verify:** After installation, type `ffmpeg -version` in your terminal.
+
+# API Keys
+## Gemini API
+Make sure you have billing turned on at Google Cloud, or it will not work. Head over to [Google AI Studio](https://aistudio.google.com/app/prompts/new_chat) and click on that shiny blue button labeled "Get API key" at the top left of the screen. Then, click the boring "Create API Key" in the middle of your screen. Click the blue "Create API key in new project" or select an existing project (usually named "My First Project." I know you).
+
+## Wolfram|Alpha API
+Thankfully, Wolfram is kind enough to give you the API for free! Go to [the Wolfram|Alpha Api](https://products.wolframalpha.com/api/) and click on the boring orange button named "[Get API Access](https://developer.wolframalpha.com/)" Make a new Wolfram account and click on thet bright orange button labeled "Get an App ID." Give it a boring name like "MyAppID" and a Description because it is required. Then, select any API type. I recommend the "Full Results API." 

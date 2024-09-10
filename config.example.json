@@ -1,0 +1,7 @@
+{
+  "GeminiAPI": "YourGeminiToken",
+  "DiscordToken": "YourDiscordToken",
+  "OwnerID": "YourOwnerID",
+  "WolframAPI": "YourWolframAPI",
+  "RacismWords": ["Your", "Bad", "Words"]
+}

@@ -2,6 +2,8 @@ from pytubefix import YouTube
 import subprocess
 import asyncio, re
 import google.generativeai as genai
+import logging
+import os
 
 from packages.utils import generateUniqueFileName
 
@@ -54,3 +56,42 @@ async def waitForFileActive(uploadedFile):
     """
     while not checkFileActive(uploadedFile):
         await asyncio.sleep(1)  # Wait for 1 second before checking again
+        
+async def handleYoutube(link):
+    output = f'./temp/{generateUniqueFileName("mp4")}'
+    videoFile, audioFile = await asyncio.to_thread(downloadVideoAudio, link.group(0))
+    
+    logging.info(f"Downloaded The Video {os.path.basename(videoFile)} and The Audio {os.path.basename(audioFile)}")
+    
+    await asyncio.to_thread(combineVideoAudio, videoFile, audioFile, output)
+    logging.info(f"Combined {os.path.basename(videoFile)} and {os.path.basename(audioFile)} to Make {os.path.basename(output)}")
+    
+    fileNames = []
+    uploadedFiles = []
+    
+    fileNames.extend([videoFile, audioFile, output])
+    uploadedYoutubeFile = await asyncio.to_thread(genai.upload_file, output)
+    uploadedFiles.append(uploadedYoutubeFile)
+    
+    logging.info(f"Uploaded {uploadedYoutubeFile.display_name} as {uploadedYoutubeFile.name}")
+    
+    return fileNames, uploadedFiles
+
+async def handleAttachment(attachment):
+    file_extension = attachment.filename.split(".")[-1]
+    unique_file_name = generateUniqueFileName(file_extension)
+    fileName = f"./temp/{unique_file_name}"
+    
+    await attachment.save(fileName)
+    logging.info(f"Saved {attachment.content_type.split('/')[0]} {fileName}")
+    
+    fileNames = []
+    uploadedFiles = []
+    
+    fileNames.append(fileName)
+    uploadedFile = await asyncio.to_thread(genai.upload_file, fileName)
+    uploadedFiles.append(uploadedFile)
+    
+    logging.info(f"Uploaded {uploadedFile.display_name} as {uploadedFile.name}")
+    
+    return fileNames, uploadedFiles

@@ -1,23 +1,234 @@
+import httpx
+import xmltodict
+import re
+from typing import Dict, Any, List
 import json
-import wolframalpha
 import logging
+import nest_asyncio
+import asyncio
 
-def wolfram(query: str):
+nest_asyncio.apply()
+
+class WolframAlpha:
     """
-    Queries the Wolfram Alpha API and returns the text result.
+    A Python object for interacting with the Wolfram Alpha API.
 
-    This function uses the Wolfram Alpha API to answer a given query 
-    and returns the textual representation of the first result. 
-
-    Args:
-        query (str): The query to be sent to Wolfram Alpha.
-
-    Returns:
-        str: The text result from Wolfram Alpha.
+    Attributes:
+        app_id: Your Wolfram Alpha App ID.
+        url: The base URL for the Wolfram Alpha API.
     """
-    client = wolframalpha.Client(json.load(open('config.json'))['WolframAPI'])
-    res = client.query(query)
-    result = next(res.results).text
     
-    logging.info(result)
-    return result
+    def __init__(self, app_id: str):
+        self.app_id: str = app_id
+        self.url: str = "http://api.wolframalpha.com/v2/"
+    
+    async def _make_request(self, endpoint: str, input: str, **kwargs: Any) -> httpx.Response:
+        """
+        Makes a request to the Wolfram Alpha API.
+
+        Args:
+            endpoint: The API endpoint to call (e.g., "query").
+            input: The input string for the query.
+            kwargs: Additional parameters to send with the request.
+
+        Returns:
+            The HTTP response from the API.
+        """
+        async with httpx.AsyncClient() as client:
+            params: Dict[str, str] = {"appid": self.app_id, "input": input}
+            params.update(kwargs) 
+            
+            logging.info(params)
+            
+            response = await client.get(self.url + endpoint, params=params)
+            
+            return response
+        
+    async def _parse_xml(self, xml_string: str) -> Dict[str, Any]:
+        """
+        Parses the XML response from Wolfram Alpha.
+
+        Args:
+            xml_string: The XML string to parse.
+
+        Returns:
+            A dictionary representing the parsed XML data.
+        """
+
+        root = xmltodict.parse(xml_string)
+        return root
+    
+    def process_subpod(self, subpods: List[Dict[str, Any]], pod_title: str) -> Dict[str, str]:
+        """
+        Helper function to process subpods and populate output.
+
+        Args:
+            subpods: A list of subpod dictionaries.
+            pod_title: The title of the pod.
+
+        Returns:
+            A dictionary containing the extracted data from subpods.
+        """
+        output: Dict[str, str] = {}
+        for subpod in subpods:
+            if re.search("steps", subpod['@title']):
+                output[subpod['@title']] = subpod['plaintext']
+            else:
+                output.setdefault(pod_title, []).append(subpod['plaintext'])
+        
+        return output
+    
+    def clean_up(self, dirty_input: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Cleans up the output from Wolfram Alpha API.
+
+        Args:
+            dirty_input: The raw output from Wolfram Alpha API.
+
+        Returns:
+            A cleaned-up dictionary containing the relevant information.
+        """
+        if dirty_input['@success'] != "true":
+            return {}
+        
+        output: Dict[str, Any] = {}
+        for pod in dirty_input['pod']:
+            subpod_data = pod['subpod']
+            
+            # Handle subpods
+            if isinstance(subpod_data, list):
+                output.update(self.process_subpod(subpod_data, pod['@title']))
+            elif subpod_data.get('plaintext'):
+                output[pod['@title']] = subpod_data['plaintext']
+
+        return output 
+        
+class WolframAlphaFullAPI(WolframAlpha):
+    """
+    Class for interacting with the Wolfram Alpha Full API.
+    """
+
+    async def query(self, input_string: str, **kwargs: Any) -> Dict[str, Any]:
+        """
+        Sends a query to the Wolfram Alpha Full API.
+
+        Args:
+            input_string: The input string for the query.
+            kwargs: Additional parameters to send with the request.
+
+        Returns:
+            A dictionary representing the query result.
+        """
+        
+        response = await self._make_request("query", input_string, **kwargs)
+        doc = await self._parse_xml(response.content)
+        
+        return doc['queryresult']
+    
+class WolframAlphaLLMAPI(WolframAlpha):
+    """
+    Class for interacting with the Wolfram Alpha LLM API.
+    """
+    
+    def __init__(self, app_id: str):
+        self.app_id: str = app_id
+        self.url: str = "http://api.wolframalpha.com/v1/"
+        
+    async def query(self, input_string: str, **kwargs: Any) -> str:
+        """
+        Sends a query to the Wolfram Alpha LLM API.
+
+        Args:
+            input_string: The input string for the query.
+            kwargs: Additional parameters to send with the request.
+
+        Returns:
+            The response from the that is LLM friendly as a string.
+        """
+        
+        response = await self._make_request("llm-api", input_string, **kwargs)
+        
+        return response.content.decode('utf-8')
+    
+class WolframAlphaShowStepsAPI(WolframAlpha):
+    """
+    Class for interacting with the Wolfram Alpha Show Steps API.
+    """
+        
+    async def query(self, input_string: str, **kwargs: Any) -> Dict[str, Any]:
+        """
+        Sends a query to the Wolfram Alpha Show Steps API.
+
+        Args:
+            input_string: The input string for the query.
+            kwargs: Additional parameters to send with the request.
+
+        Returns:
+            A dictionary representing the query result that has the step-by-step instruction.
+        """
+        
+        response = await self._make_request("query", input_string, podstate="Result__Step-by-step solution", format="plaintext", **kwargs)
+        doc = await self._parse_xml(response.content)
+        
+        return doc['queryresult']
+
+
+
+def WolframAlphaFull(query: str):
+    """
+    Sends a query to the Wolfram Alpha Full API.
+    
+    Args:
+        input_string: The input string for the query.
+        
+    Returns:
+        A dictionary representing the query result.
+    """
+    client = WolframAlphaFullAPI(json.load(open("config.json"))['WolframAPI'])
+    
+    loop = asyncio.get_running_loop()
+    output = client.clean_up(loop.run_until_complete(client.query(query)))
+    
+    logging.info(output)
+    
+    return output
+
+def WolfarmAlphaLLM(query: str):
+    """
+    Sends a query to the Wolfram Alpha LLM API.
+    
+    Args:
+        input_string: The input string for the query.
+        
+    Returns:
+        The response from the that is LLM friendly as a string.
+    """
+    client = WolframAlphaLLMAPI(json.load(open("config.json"))['WolframAPI'])
+    
+    loop = asyncio.get_running_loop()
+    output = client.clean_up(loop.run_until_complete(client.query(query)))
+    
+    logging.info(output)
+    
+    return output
+
+def WolfarmAlphaShowSteps(query: str):
+    """
+    Sends a query to the Wolfram Alpha Show Steps API. Sometimes, may not show the steps.
+    
+    Args:
+        input_string: The input string for the query.
+        kwargs: Additional parameters to send with the request.
+        
+    Returns:
+        A dictionary representing the query result that has the step-by-step instruction.
+    """
+    client = WolframAlphaShowStepsAPI(json.load(open("config.json"))['WolframAPI'])
+    
+    loop = asyncio.get_running_loop()
+    output = client.clean_up(loop.run_until_complete(client.query(query)))
+    
+    logging.info(output)
+    
+    return output
+

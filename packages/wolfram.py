@@ -6,7 +6,6 @@ import json
 import logging
 import nest_asyncio
 import asyncio
-
 nest_asyncio.apply()
 
 class WolframAlpha:
@@ -108,19 +107,24 @@ class WolframAlphaFullAPI(WolframAlpha):
     Class for interacting with the Wolfram Alpha Full API.
     """
 
-    async def query(self, input_string: str, **kwargs: Any) -> Dict[str, Any]:
+    async def query(self, input_string: str, show_steps: bool = False, **kwargs: Any) -> Dict[str, Any]:
         """
         Sends a query to the Wolfram Alpha Full API.
 
         Args:
             input_string: The input string for the query.
+            show_steps: Whether to show steps.
             kwargs: Additional parameters to send with the request.
 
         Returns:
             A dictionary representing the query result.
         """
+        configs = {}
         
-        response = await self._make_request("query", input_string, **kwargs)
+        if show_steps:
+            configs = {"podstate":"Result__Step-by-step solution", "format":"plaintext"}
+        
+        response = await self._make_request("query", input_string, **configs, **kwargs)
         doc = await self._parse_xml(response.content)
         
         return doc['queryresult']
@@ -149,86 +153,55 @@ class WolframAlphaLLMAPI(WolframAlpha):
         response = await self._make_request("llm-api", input_string, **kwargs)
         
         return response.content.decode('utf-8')
-    
-class WolframAlphaShowStepsAPI(WolframAlpha):
-    """
-    Class for interacting with the Wolfram Alpha Show Steps API.
-    """
-        
-    async def query(self, input_string: str, **kwargs: Any) -> Dict[str, Any]:
-        """
-        Sends a query to the Wolfram Alpha Show Steps API.
-
-        Args:
-            input_string: The input string for the query.
-            kwargs: Additional parameters to send with the request.
-
-        Returns:
-            A dictionary representing the query result that has the step-by-step instruction.
-        """
-        
-        response = await self._make_request("query", input_string, podstate="Result__Step-by-step solution", format="plaintext", **kwargs)
-        doc = await self._parse_xml(response.content)
-        
-        return doc['queryresult']
 
 
-
-def WolframAlphaFull(query: str):
+def WolframAlphaFull(query: str, show_steps: bool = False, raw: bool = False):
     """
     Sends a query to the Wolfram Alpha Full API.
     
     Args:
         input_string: The input string for the query.
+        show_steps: Whether to show the steps or not.
+        raw: Whether to return the raw output. Use this when the cleaned output doesn't work.
         
     Returns:
         A dictionary representing the query result.
     """
     client = WolframAlphaFullAPI(json.load(open("config.json"))['WolframAPI'])
     
-    loop = asyncio.get_running_loop()
-    output = client.clean_up(loop.run_until_complete(client.query(query)))
+    try:
+        loop = asyncio.get_running_loop()
+        output = client.clean_up(loop.run_until_complete(client.query(query, show_steps)))
+    except RuntimeError:
+        output = client.clean_up(asyncio.run(client.query(query, show_steps)))
     
     logging.info(output)
     
+    if raw:
+        return query
     return output
 
-def WolfarmAlphaLLM(query: str):
+def WolfarmAlphaLLM(query: str, raw: bool = False):
     """
     Sends a query to the Wolfram Alpha LLM API.
     
     Args:
         input_string: The input string for the query.
+        raw: Whether to return the raw output. Use this when the cleaned output doesn't work.
         
     Returns:
         The response from the that is LLM friendly as a string.
     """
     client = WolframAlphaLLMAPI(json.load(open("config.json"))['WolframAPI'])
     
-    loop = asyncio.get_running_loop()
-    output = client.clean_up(loop.run_until_complete(client.query(query)))
+    try:
+        loop = asyncio.get_running_loop()
+        output = client.clean_up(loop.run_until_complete(client.query(query)))
+    except RuntimeError:
+        output = client.clean_up(asyncio.run(client.query(query)))
     
     logging.info(output)
     
+    if raw:
+        return query
     return output
-
-def WolfarmAlphaShowSteps(query: str):
-    """
-    Sends a query to the Wolfram Alpha Show Steps API. Sometimes, may not show the steps.
-    
-    Args:
-        input_string: The input string for the query.
-        kwargs: Additional parameters to send with the request.
-        
-    Returns:
-        A dictionary representing the query result that has the step-by-step instruction.
-    """
-    client = WolframAlphaShowStepsAPI(json.load(open("config.json"))['WolframAPI'])
-    
-    loop = asyncio.get_running_loop()
-    output = client.clean_up(loop.run_until_complete(client.query(query)))
-    
-    logging.info(output)
-    
-    return output
-

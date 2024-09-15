@@ -7,9 +7,10 @@ import logging
 from commands.prompt import prompt
 from commands.sync import sync
 
-from packages.duckduckgo import search_duckduckgo
+from packages.internet import search_duckduckgo, make_get_request, get_wikipedia_page
 from packages.weathermap import get_weather
 from packages.wolfram import *
+from packages.utils import run_code
 
 # Configuration
 with open('config.json') as f:
@@ -20,16 +21,16 @@ SYSTEM_PROMPTS = ["You are a sassy, quick-witted chatbot named \"SassBot.\" You 
 
 SYSTEM_PROMPT = SYSTEM_PROMPTS[0]
 
-TOOLS = [search_duckduckgo, get_weather, WolframAlphaFull, WolfarmAlphaLLM, WolfarmAlphaShowSteps]
+TOOLS = [search_duckduckgo, get_weather, WolframAlphaFull, WolfarmAlphaLLM, make_get_request, get_wikipedia_page, run_code]
 
 genai.configure(api_key=config['GeminiAPI'])
 
 # Model Options and Index
 model_options = [
+    'gemini-1.5-pro-exp-0827',
     'gemini-1.5-flash',
     'gemini-1.5-flash-8b-exp-0827',
     'gemini-1.5-pro',
-    'gemini-1.5-pro-exp-0827',
     'gemma-2-27b-it'
 ]
 

@@ -1,7 +1,20 @@
 import requests
-from duckduckgo_search import DDGS
-from bs4 import BeautifulSoup
+import httpx
+import wikipedia
+import google.generativeai as genai
+import json
 import logging
+
+from bs4 import BeautifulSoup
+from duckduckgo_search import DDGS
+from typing import Any, Dict 
+
+with open('config.json') as f:
+    config = json.loads(f.read())
+
+genai.configure(api_key=config['GeminiAPI'])
+
+model = genai.GenerativeModel("gemini-1.5-pro-exp-0827")
 
 def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = True, regular_search_queries: bool = True, get_website_content: bool = False) -> list[dict]:
     """Searches DuckDuckGo for a given query and returns a list of results.
@@ -51,14 +64,14 @@ def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = 
             results = []
             for result in ddgs.text(query, region='wt-wt', safesearch='moderate', timelimit=None, max_results=maxres):
                 if get_website_content:
-                    result["body"] = get_webpage_content(result["href"])
+                    result["body"] = get_webpage_content_ddg(result["href"])
                 results.append(result)
             logging.info(results)
             return results
         else:
             return "One of ('instant_answers', 'regular_search_queries') must be True"
 
-def get_webpage_content(url: str) -> str:
+def get_webpage_content_ddg(url: str) -> str:
     headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
                "Accept-Language": "en-US,en;q=0.5"}
@@ -76,3 +89,49 @@ def get_webpage_content(url: str) -> str:
 
     strings = soup.stripped_strings
     return '\n'.join([s.strip() for s in strings])
+
+def make_get_request(url: str, *kwargs: Any) -> str:
+    """
+    Gets the content of a website.
+    
+    Args:
+        url: The URL of the website.
+        kwargs: Additional parameters to send with the request.
+    
+    Returns:
+        The content of the website. 
+    """
+    
+    params: Dict[str, str] = {}
+    params.update(kwargs) 
+    
+    try:
+        with httpx.Client() as client:
+            response = client.get(url, params=params)
+            response.raise_for_status()
+            return response.text
+    except httpx.HTTPError as exc:
+        logging.exception(f"HTTP error occurred: {exc}")
+        return
+
+def get_wikipedia_page(query: str) -> str:
+    """
+    Retrieves the content of a Wikipedia page based on the given query.
+
+    Args:
+        query: The search query for the Wikipedia article.
+
+    Returns:
+        The Wikipedia page content as a string, or an error message if the search fails.
+    """
+    try:
+        # Use Wikipedia API to get the page content
+        page = wikipedia.page(query)
+        return page.content
+    except wikipedia.exceptions.PageError:
+        return f"Sorry, I couldn't find a Wikipedia page for '{query}'."
+    except wikipedia.exceptions.DisambiguationError as e:
+        return f"Your query is ambiguous. Please be more specific. Did you mean any of these?\n{e.options}"
+    except Exception as e:
+        logging.exception(f"An error occurred while fetching Wikipedia data: {e}")
+        return "Sorry, I encountered an error while fetching information from Wikipedia."

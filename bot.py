@@ -10,26 +10,21 @@ from commands.sync import sync
 from packages.internet import search_duckduckgo, make_get_request, get_wikipedia_page
 from packages.weathermap import get_weather
 from packages.wolfram import *
-from packages.utils import run_code
+from packages.utils import execute_code
 
 # Configuration
-with open('config.json') as f:
-    config = json.loads(f.read())
+CONFIG = json.load(open("config.json"))
 
-# CONSTANTS and variables
-SYSTEM_PROMPTS = ["You are a sassy, quick-witted chatbot named \"SassBot.\" You are connected to a Discord environment.  Avoid being rude or offensive. Engage users in entertaining and humorous conversations, Provide helpful information when asked, but always with a touch of sass, Never directly insult the user, but playfully tease or challenge their statements when appropriate, and Use emojis and internet slang sparingly to enhance your sassy persona. You should adjust your behaviour to mimic estimated personalities of ones, who wrote messages to you. Messages that will be sent to you will format like this: {Name Of The User} With Display Name {Display Name} and ID {User ID}: {Message}. You can talk normally.", "You are a friendly, fun, and knowledgeable AI assistant. You are connected to Discord. If a user asks about topics you don't know the answer to, politely inform them that you cannot answer on those questions. If a user becomes hostile or uses inappropriate language, maintain a calm and professional demeanor. When generating stories or poems, feel free to use figurative language, such as metaphors, similes, and personification, to make your writing more vivid and engaging. Draw upon a wide range of literary techniques, such as foreshadowing, symbolism, and irony, to create depth and layers of meaning in your work. Messages that will be sent to you will format like this: {Name Of The User} With Display Name {Display Name} and ID {User ID}: {Message}. You can talk normally."]
+SYSTEM_PROMPT = CONFIG["SystemPrompt"]
+TOOLS = [search_duckduckgo, get_weather, WolframAlphaFull, WolfarmAlphaLLM, make_get_request, get_wikipedia_page, execute_code]
 
-SYSTEM_PROMPT = SYSTEM_PROMPTS[0]
-
-TOOLS = [search_duckduckgo, get_weather, WolframAlphaFull, WolfarmAlphaLLM, make_get_request, get_wikipedia_page, run_code]
-
-genai.configure(api_key=config['GeminiAPI'])
+genai.configure(api_key=CONFIG['GeminiAPI'])
 
 # Model Options and Index
 model_options = [
+    'gemini-1.5-flash-8b-exp-0827',
     'gemini-1.5-pro-exp-0827',
     'gemini-1.5-flash',
-    'gemini-1.5-flash-8b-exp-0827',
     'gemini-1.5-pro',
     'gemma-2-27b-it'
 ]
@@ -55,10 +50,9 @@ model_names = {
 logging.basicConfig(level=logging.INFO,  # Set default logging level
                     format='%(asctime)s - %(levelname)s - %(message)s',  # Time - Level Name - message
                     handlers=[  # Add handlers
-                        logging.FileHandler("bot.log"),  # Log to file
+                        logging.FileHandler("bot.log", encoding='utf-8'),  # Log to file
                         logging.StreamHandler()  # Log to console
                     ])
-
 
 # On start event
 @client.event
@@ -86,9 +80,6 @@ async def toggle(ctx: commands.Context):
 
 @client.command(name="which")
 async def which(ctx: commands.Context):
-    """
-    See which model you are using. 
-    """
     friendly_name = model_names['models/' + model.model_name]
     await ctx.send(f"You are using {friendly_name}")
 
@@ -98,4 +89,4 @@ client.add_command(prompt(model))
 client.add_command(sync)
 
 # Run the bot
-client.run(config['DiscordToken'])
+client.run(CONFIG['DiscordToken'])

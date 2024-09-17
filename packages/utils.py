@@ -1,11 +1,9 @@
 import time
 import random
 import string
-import re
 import sys
 import io
 import logging
-from typing import Dict, Any, Tuple
 
 def generateUniqueFileName(extension):
     """
@@ -19,28 +17,8 @@ async def sendLongMessage(ctx, message, length):
     """Sends a long message in chunks."""
     for i in range(0, len(message), length):
         await ctx.reply(message[i:i + length])
-        
-def makeOutputWithCodeExecutionCleaner(text: str):
-    if re.search(r"``` (.*)\n([\s\S]+.*)```", text):
-        badSnippetText = re.search(r"``` (.*)\n([\s\S]+.*)```", text).group(0)
-        outputSnippet = re.search(r"```\n([^\n```][\s\S]+.*)```", badSnippetText).group(0)
-        outputSnippetOnly = re.sub(r"(```|\n)", '', outputSnippet)
-        codeSnippet = re.sub(outputSnippet, '', badSnippetText)
-        codeSnippetOnly = re.sub(r"(``` (.*)|\n```)", '', codeSnippet)
-        language = re.sub(r'``` ', '', re.search(r"``` (.*)", badSnippetText).group(0))
-        others = re.sub(r"``` (.*)\n([\s\S]+.*)```", '', text)
-        output = f"""```{language}
-{codeSnippetOnly}
-```
-```
-Output: {outputSnippetOnly}
-```
-{others}"""
-        return output
-    else:
-        return text
 
-def run_code(code_string: str):
+def execute_code(code_string: str):
     """Executes Python code from a string and captures the output.
 
     Args:
@@ -75,7 +53,5 @@ def run_code(code_string: str):
         # Restore stdout and stderr
         sys.stdout = old_stdout
         sys.stderr = old_stderr
-
-    logging.info(print(captured_stdout.getvalue()))
 
     return captured_stdout.getvalue()

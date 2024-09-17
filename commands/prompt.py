@@ -1,4 +1,3 @@
-from discord.ext import commands
 import google.generativeai as genai
 import logging
 import re
@@ -8,19 +7,30 @@ import asyncio
 import json
 import datetime
 
+from discord.ext import commands
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
 from packages.utils import *
 from packages.youtube import *
 
-YOUTUBE_PATTERN = re.compile(r"https://(www\.youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)(?:\S*(?:&|\?)list=[^&]+)?(?:&index=\d+)?")
-MAX_MESSAGE_LENGTH = 2000
-SAFETY_SETTINGS = {
-    genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH: genai.types.HarmBlockThreshold.BLOCK_ONLY_HIGH,
-    genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT: genai.types.HarmBlockThreshold.BLOCK_ONLY_HIGH,
-    genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: genai.types.HarmBlockThreshold.BLOCK_ONLY_HIGH,
-    genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: genai.types.HarmBlockThreshold.BLOCK_ONLY_HIGH
+HARM_BLOCK_THRESHOLD = {
+    "BLOCK_LOW_AND_ABOVE": HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    "BLOCK_MEDIUM_AND_ABOVE": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    "BLOCK_ONLY_HIGH": HarmBlockThreshold.BLOCK_ONLY_HIGH,
+    "BLOCK_NONE": HarmBlockThreshold.BLOCK_NONE,
 }
 
 CONFIG = json.load(open("config.json"))
+
+YOUTUBE_PATTERN = re.compile(r"https://(www\.youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)(?:\S*(?:&|\?)list=[^&]+)?(?:&index=\d+)?")
+MAX_MESSAGE_LENGTH = 2000
+SAFETY_SETTING = HARM_BLOCK_THRESHOLD[CONFIG["HarmBlockThreshold"]]
+SAFETY = {
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: SAFETY_SETTING,
+    HarmCategory.HARM_CATEGORY_HARASSMENT: SAFETY_SETTING,
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH: SAFETY_SETTING,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: SAFETY_SETTING
+}
 
 def prompt(model: genai.GenerativeModel):
     chat = model.start_chat(enable_automatic_function_calling=True)
@@ -39,7 +49,7 @@ def prompt(model: genai.GenerativeModel):
                     await ctx.reply("Alright, I have cleared my context. What are we gonna talk about?")
                     return
                 
-                for word in CONFIG["RacismWords"]:
+                for word in CONFIG["BadWords"]:
                     if word in ctx.message.content.lower():
                         await ctx.message.delete()
                         await ctx.author.timeout(datetime.timedelta(minutes=10), reason="Saying a word blocked in config.json")
@@ -82,12 +92,11 @@ def prompt(model: genai.GenerativeModel):
                     
                 logging.info(f"Got Final Prompt {finalPrompt}")
                 
-                response = chat.send_message(finalPrompt, safety_settings=SAFETY_SETTINGS)
-                logging.info(f"Got Response.\n{response}")
+                response = await chat.send_message_async(finalPrompt, safety_settings=SAFETY)
                 text = response.text
-                cleanedText = text
+                logging.info(f"Got Response.\n{text}")
                 
-                await sendLongMessage(ctx, cleanedText, MAX_MESSAGE_LENGTH)
+                await sendLongMessage(ctx, text, MAX_MESSAGE_LENGTH)
         
         except ssl.SSLEOFError as e:
             errorMessage = f"`{e}`\nPerhaps, you can try your request again!"
@@ -95,8 +104,7 @@ def prompt(model: genai.GenerativeModel):
             await sendLongMessage(ctx, errorMessage, MAX_MESSAGE_LENGTH)
         
         except genai.types.StopCandidateException as e:
-            logging.exception(e)
-            await sendLongMessage(ctx, f"```\n{traceback.format_exception_only(e)[0]}```", MAX_MESSAGE_LENGTH)
+            await sendLongMessage(ctx, f"Your prompt is not safe! Try again with a safer prompt.", MAX_MESSAGE_LENGTH)
             
         except Exception as e:
             errorMessage = traceback.format_exc()

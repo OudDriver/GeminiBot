@@ -127,6 +127,7 @@ def get_wikipedia_page(query: str) -> str:
     try:
         # Use Wikipedia API to get the page content
         page = wikipedia.page(query)
+        logging.info(f"Retrieval about {page.title} succesful.")
         return page.content
     except wikipedia.exceptions.PageError:
         return f"Sorry, I couldn't find a Wikipedia page for '{query}'."

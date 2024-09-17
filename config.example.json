@@ -1,7 +1,9 @@
 {
-  "GeminiAPI": "YourGeminiToken",
-  "DiscordToken": "YourDiscordToken",
-  "OwnerID": "YourOwnerID",
-  "WolframAPI": "YourWolframAPI",
-  "RacismWords": ["Your", "Bad", "Words"]
+  "GeminiAPI": "Your Gemini Token",
+  "DiscordToken": "Your Discord Token",
+  "OwnerID": "Your Owner ID",
+  "WolframAPI": "Your Wolfram API App ID",
+  "BadWords": ["Your", "Bad", "Words"],
+  "SystemPrompt": "Your System Prompt",
+  "HarmBlockThreshold": "BLOCK_LOW_AND_ABOVE, BLOCK_MEDIUM_AND_ABOVE, BLOCK_ONLY_HIGH, BLOCK_NONE"
 }

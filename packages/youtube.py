@@ -4,34 +4,17 @@ import asyncio, re
 import google.generativeai as genai
 import logging
 import os
+import time
 
 from packages.utils import generateUniqueFileName
 
-def combineVideoAudio(videoPath: str, audioPath: str, outputPath: str):
-    """
-    Combines video and audio files using ffmpeg.
-    """
-    cmd = [
-        "ffmpeg",
-        "-i", videoPath,
-        "-i", audioPath,
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-map", "0:v:0",
-        "-map", "1:a:0",
-        "-shortest",
-        outputPath
-    ]
-    subprocess.run(cmd)
-
-def downloadVideoAudio(link: str):
+def downloadVideoAudio(link: str) -> tuple:
     """
     Downloads separate video and audio streams from a YouTube link and returns their paths.
     """
-    video = YouTube(link).streams.filter(adaptive=True).first().download(output_path='./temp', filename=generateUniqueFileName('mp4')) 
-    audio = YouTube(link).streams.filter(only_audio=True).first().download(output_path='./temp', filename=generateUniqueFileName('mp3'))
+    video = YouTube(link).streams.first().download(output_path='./temp', filename=generateUniqueFileName('mp4')) 
 
-    return (video, audio)
+    return video
 
 def searchRegex(pattern: str, text: str):
     """
@@ -54,32 +37,31 @@ async def waitForFileActive(uploadedFile):
     """
     Waits until the uploaded file becomes active on Google servers.
     """
+    start_time = time.monotonic()
+    timeout = 30
+
     try:
-        async with asyncio.timeout(10): 
-            while not checkFileActive(uploadedFile):
-                await asyncio.sleep(1)  # Wait for 1 second before checking again
+        while not checkFileActive(uploadedFile):
+            if time.monotonic() - start_time >= timeout:
+                logging.warning(f"Timeout while waiting for file {uploadedFile.name} to become active. Skipping Check")
+                return 
+
+            await asyncio.sleep(1)  
                 
-    except asyncio.TimeoutError:
-        logging.warning(f"Timeout while waiting for file {uploadedFile.name} to become active. Skipping Check")
-        
     except Exception as e:
         logging.error(f"Error while waiting for file active! {e}.")
         
 async def handleYoutube(link):
     try:
-        output = f'./temp/{generateUniqueFileName("mp4")}'
-        videoFile, audioFile = await asyncio.to_thread(downloadVideoAudio, link.group(0))
+        videoFile = await asyncio.to_thread(downloadVideoAudio, link.group(0))
         
-        logging.info(f"Downloaded The Video {os.path.basename(videoFile)} and The Audio {os.path.basename(audioFile)}")
-        
-        await asyncio.to_thread(combineVideoAudio, videoFile, audioFile, output)
-        logging.info(f"Combined {os.path.basename(videoFile)} and {os.path.basename(audioFile)} to Make {os.path.basename(output)}")
+        logging.info(f"Downloaded The Video {os.path.basename(videoFile)}")
         
         fileNames = []
         uploadedFiles = []
         
-        fileNames.extend([videoFile, audioFile, output])
-        uploadedYoutubeFile = await asyncio.to_thread(genai.upload_file, output)
+        fileNames.extend([videoFile])
+        uploadedYoutubeFile = await asyncio.to_thread(genai.upload_file, videoFile)
         uploadedFiles.append(uploadedYoutubeFile)
         
         logging.info(f"Uploaded {uploadedYoutubeFile.display_name} as {uploadedYoutubeFile.name}")

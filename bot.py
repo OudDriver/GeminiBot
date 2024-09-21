@@ -24,9 +24,6 @@ genai.configure(api_key=CONFIG['GeminiAPI'])
 model_options = [
     'gemini-1.5-flash-8b-exp-0827',
     'gemini-1.5-pro-exp-0827',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
-    'gemma-2-27b-it'
 ]
 
 current_model_index = 0
@@ -39,11 +36,8 @@ client = commands.Bot(command_prefix='!', intents=intents)
 
 # Map internal model names to user-friendly names
 model_names = {
-    'models/gemini-1.5-flash': 'Gemini 1.5 Flash',
     'models/gemini-1.5-flash-8b-exp-0827': 'Gemini 1.5 Flash 8B 0827',
-    'models/gemini-1.5-pro': 'Gemini 1.5 Pro',
     'models/gemini-1.5-pro-exp-0827': 'Gemini 1.5 Pro Experimental 0827',
-    'models/gemma-2-27b-it': 'Gemma 2 27b'
 }
 
 # Configure logging

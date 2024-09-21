@@ -112,16 +112,11 @@ def prompt(model: genai.GenerativeModel):
             await sendLongMessage(ctx, f"`{traceback.format_exception_only(e)[0]}`", MAX_MESSAGE_LENGTH)
 
         finally:
-            """
             try:
                 for file in fileNames:
                     os.remove(file)
                     logging.info(f"Deleted {os.path.basename(file)} at local server")
-                for uploadedFile in uploadedFiles:
-                    logging.info(f"Deleted {uploadedFile.name} at Google server")
-                    await asyncio.to_thread(genai.delete_file, uploadedFile.name)
             except Exception as e:
                 pass
-            """
 
     return command

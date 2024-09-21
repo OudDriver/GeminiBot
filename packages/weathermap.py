@@ -30,7 +30,7 @@ def get_weather(city: str):
             output += "Pressure: " + str(weather.pressure) + " mbar\n"
             output += "Country: " + str(weather.country)
             
-            logging.info(output)
+            logging.info(f"\n{output}")
             return output
 
     try:
@@ -38,4 +38,3 @@ def get_weather(city: str):
         return loop.run_until_complete(weather(city))
     except RuntimeError:  # No event loop running
         return asyncio.run(weather(city))
-    

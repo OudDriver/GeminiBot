@@ -88,20 +88,28 @@ class WolframAlpha:
             A cleaned-up dictionary containing the relevant information.
         """
         if dirty_input['@success'] != "true":
-            return {}
+            return dirty_input
         
         output: Dict[str, Any] = {}
-        for pod in dirty_input['pod']:
+
+        # Check if 'pod' is a list or a dictionary
+        if isinstance(dirty_input['pod'], list):
+            for pod in dirty_input['pod']: 
+                subpod_data = pod['subpod']
+                if isinstance(subpod_data, list):
+                    output.update(self.process_subpod(subpod_data, pod['@title']))
+                elif subpod_data.get('plaintext'):
+                    output[pod['@title']] = subpod_data['plaintext']
+        else: # 'pod' is a single dictionary
+            pod = dirty_input['pod'] 
             subpod_data = pod['subpod']
-            
-            # Handle subpods
             if isinstance(subpod_data, list):
                 output.update(self.process_subpod(subpod_data, pod['@title']))
             elif subpod_data.get('plaintext'):
                 output[pod['@title']] = subpod_data['plaintext']
 
-        return output 
-        
+        return output
+    
 class WolframAlphaFullAPI(WolframAlpha):
     """
     Class for interacting with the Wolfram Alpha Full API.
@@ -122,7 +130,14 @@ class WolframAlphaFullAPI(WolframAlpha):
         configs = {}
         
         if show_steps:
-            configs = {"podstate":"Result__Step-by-step solution", "format":"plaintext"}
+            temp_response = await self._make_request("query", input_string, **configs, **kwargs)
+            temp_doc = await self._parse_xml(temp_response.content)
+            temp_doc = temp_doc['queryresult']
+            
+            states = temp_doc['pod']['states']['state']
+            if states['@name'] == 'Step-by-step solution':
+                step_by_step_input = states['@input']   
+                configs = {"podstate":step_by_step_input, "format":"plaintext"}
         
         response = await self._make_request("query", input_string, **configs, **kwargs)
         doc = await self._parse_xml(response.content)
@@ -157,7 +172,7 @@ class WolframAlphaLLMAPI(WolframAlpha):
 
 def WolframAlphaFull(query: str, show_steps: bool = False, raw: bool = False):
     """
-    Sends a query to the Wolfram Alpha Full API.
+    Sends a query to the Wolfram Alpha Full API. Wolfram Alpha can answer simple facts to hard math questions.
     
     Args:
         input_string: The input string for the query.

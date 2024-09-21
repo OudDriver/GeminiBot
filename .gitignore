@@ -10,5 +10,5 @@ temp/
 config.json
 
 test.py
-testidk.py
-snek.py
+
+run-with-conda.ps1

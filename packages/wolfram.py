@@ -6,9 +6,10 @@ import json
 import logging
 import nest_asyncio
 import asyncio
+
 nest_asyncio.apply()
 
-class WolframAlpha:
+class WolframAlphaAPI:
     """
     A Python object for interacting with the Wolfram Alpha API.
 
@@ -56,6 +57,23 @@ class WolframAlpha:
 
         root = xmltodict.parse(xml_string)
         return root
+    
+    async def find_steps_input(self, input_string):
+        temp_response = await self._make_request("query", input_string)
+        temp_doc = await self._parse_xml(temp_response.content)
+        temp_doc = temp_doc['queryresult']
+        
+        if isinstance(temp_doc['pod'], list):
+            for pods in temp_doc["pod"]:
+                states = pods["states"]
+                for state in states["state"]:
+                    if state['@name'] == 'Step-by-step solution':
+                        return {"podstate": state['@input'], "format":"plaintext"}
+        
+        states = temp_doc['pod']['states']['state']
+        if states['@name'] == 'Step-by-step solution':
+            step_by_step_input = states['@input']   
+            return {"podstate":step_by_step_input, "format":"plaintext"}
     
     def process_subpod(self, subpods: List[Dict[str, Any]], pod_title: str) -> Dict[str, str]:
         """
@@ -110,7 +128,7 @@ class WolframAlpha:
 
         return output
     
-class WolframAlphaFullAPI(WolframAlpha):
+class WolframAlphaFullAPI(WolframAlphaAPI):
     """
     Class for interacting with the Wolfram Alpha Full API.
     """
@@ -130,47 +148,16 @@ class WolframAlphaFullAPI(WolframAlpha):
         configs = {}
         
         if show_steps:
-            temp_response = await self._make_request("query", input_string, **configs, **kwargs)
-            temp_doc = await self._parse_xml(temp_response.content)
-            temp_doc = temp_doc['queryresult']
-            
-            states = temp_doc['pod']['states']['state']
-            if states['@name'] == 'Step-by-step solution':
-                step_by_step_input = states['@input']   
-                configs = {"podstate":step_by_step_input, "format":"plaintext"}
+            show_steps_input = await self.find_steps_input(input_string)
+            configs.update(show_steps_input)
         
         response = await self._make_request("query", input_string, **configs, **kwargs)
         doc = await self._parse_xml(response.content)
         
         return doc['queryresult']
-    
-class WolframAlphaLLMAPI(WolframAlpha):
-    """
-    Class for interacting with the Wolfram Alpha LLM API.
-    """
-    
-    def __init__(self, app_id: str):
-        self.app_id: str = app_id
-        self.url: str = "http://api.wolframalpha.com/v1/"
-        
-    async def query(self, input_string: str, **kwargs: Any) -> str:
-        """
-        Sends a query to the Wolfram Alpha LLM API.
-
-        Args:
-            input_string: The input string for the query.
-            kwargs: Additional parameters to send with the request.
-
-        Returns:
-            The response from the that is LLM friendly as a string.
-        """
-        
-        response = await self._make_request("llm-api", input_string, **kwargs)
-        
-        return response.content.decode('utf-8')
 
 
-def WolframAlphaFull(query: str, show_steps: bool = False, raw: bool = False):
+def WolframAlpha(query: str, show_steps: bool = False, raw: bool = False):
     """
     Sends a query to the Wolfram Alpha Full API. Wolfram Alpha can answer simple facts to hard math questions.
     
@@ -189,31 +176,6 @@ def WolframAlphaFull(query: str, show_steps: bool = False, raw: bool = False):
         output = client.clean_up(loop.run_until_complete(client.query(query, show_steps)))
     except RuntimeError:
         output = client.clean_up(asyncio.run(client.query(query, show_steps)))
-    
-    logging.info(output)
-    
-    if raw:
-        return query
-    return output
-
-def WolfarmAlphaLLM(query: str, raw: bool = False):
-    """
-    Sends a query to the Wolfram Alpha LLM API.
-    
-    Args:
-        input_string: The input string for the query.
-        raw: Whether to return the raw output. Use this when the cleaned output doesn't work.
-        
-    Returns:
-        The response from the that is LLM friendly as a string.
-    """
-    client = WolframAlphaLLMAPI(json.load(open("config.json"))['WolframAPI'])
-    
-    try:
-        loop = asyncio.get_running_loop()
-        output = client.clean_up(loop.run_until_complete(client.query(query)))
-    except RuntimeError:
-        output = client.clean_up(asyncio.run(client.query(query)))
     
     logging.info(output)
     

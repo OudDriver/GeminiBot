@@ -9,14 +9,13 @@ from commands.sync import sync
 
 from packages.internet import search_duckduckgo, make_get_request, get_wikipedia_page
 from packages.weathermap import get_weather
-from packages.wolfram import *
-from packages.utils import execute_code
+from packages.wolfram import WolframAlpha
 
 # Configuration
 CONFIG = json.load(open("config.json"))
 
 SYSTEM_PROMPT = CONFIG["SystemPrompt"]
-TOOLS = [search_duckduckgo, get_weather, WolframAlphaFull, WolfarmAlphaLLM, make_get_request, get_wikipedia_page, execute_code]
+TOOLS = [search_duckduckgo, get_weather, WolframAlpha, make_get_request, get_wikipedia_page]
 
 genai.configure(api_key=CONFIG['GeminiAPI'])
 
@@ -79,7 +78,7 @@ async def which(ctx: commands.Context):
 
 
 # Add commands
-client.add_command(prompt(model))
+client.add_command(prompt(model, TOOLS))
 client.add_command(sync)
 
 # Run the bot

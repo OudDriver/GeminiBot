@@ -32,8 +32,8 @@ SAFETY = {
     HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: SAFETY_SETTING
 }
 
-def prompt(model: genai.GenerativeModel):
-    chat = model.start_chat(enable_automatic_function_calling=True)
+def prompt(model: genai.GenerativeModel, tools: list):
+    chat = model.start_chat()
     @commands.command(name="prompt")
     async def command(ctx: commands.Context, *, message: str):
         """
@@ -93,6 +93,33 @@ def prompt(model: genai.GenerativeModel):
                 logging.info(f"Got Final Prompt {finalPrompt}")
                 
                 response = await chat.send_message_async(finalPrompt, safety_settings=SAFETY)
+                
+                func_call_result = {}
+                function_call = False
+                
+                for part in response.parts:
+                    if fn := part.function_call:
+                        function_call = True
+                        arg_output = ", ".join(f"{key}={val}" for key, val in fn.args.items())
+                        logging.info(f"{fn.name}({arg_output})")
+                        
+                        func = None
+                        for f in tools:
+                            if f.__name__ == fn.name:
+                                func = f
+                                break
+                        
+                        args = fn.args
+                        
+                        result = func(**args)
+                        func_call_result[fn.name] = result
+                
+                if function_call == True:
+                    response_parts = [
+                        genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fn, response={"result": val})) for fn, val in func_call_result.items()
+                    ]
+                    response = await chat.send_message_async(response_parts, safety_settings=SAFETY)
+                    
                 text = response.text
                 logging.info(f"Got Response.\n{text}")
                 

@@ -1,5 +1,4 @@
 from pytubefix import YouTube
-import subprocess
 import asyncio, re
 import google.generativeai as genai
 import logging

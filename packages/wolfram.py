@@ -66,6 +66,10 @@ class WolframAlphaAPI:
         if isinstance(temp_doc['pod'], list):
             for pods in temp_doc["pod"]:
                 states = pods["states"]
+                if states["@count"] == "1":
+                    state = states["state"]
+                    if state['@name'] == 'Step-by-step solution':
+                        return {"podstate": state['@input'], "format":"plaintext"}
                 for state in states["state"]:
                     if state['@name'] == 'Step-by-step solution':
                         return {"podstate": state['@input'], "format":"plaintext"}

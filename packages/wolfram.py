@@ -54,30 +54,26 @@ class WolframAlphaAPI:
         Returns:
             A dictionary representing the parsed XML data.
         """
-
-        root = xmltodict.parse(xml_string)
-        return root
+        return xmltodict.parse(xml_string)
     
     async def find_steps_input(self, input_string):
         temp_response = await self._make_request("query", input_string)
         temp_doc = await self._parse_xml(temp_response.content)
         temp_doc = temp_doc['queryresult']
         
+        states = []
         if isinstance(temp_doc['pod'], list):
-            for pods in temp_doc["pod"]:
-                states = pods["states"]
-                if states["@count"] == "1":
-                    state = states["state"]
-                    if state['@name'] == 'Step-by-step solution':
-                        return {"podstate": state['@input'], "format":"plaintext"}
-                for state in states["state"]:
-                    if state['@name'] == 'Step-by-step solution':
-                        return {"podstate": state['@input'], "format":"plaintext"}
+            for pod in temp_doc["pod"]:
+                if "states" in pod:
+                    states.extend(pod["states"]["state"] if isinstance(pod["states"]["state"], list) else [pod["states"]["state"]])
+        else:
+            states = temp_doc['pod']['states']['state']
+            if not isinstance(states, list):
+                states = [states]
         
-        states = temp_doc['pod']['states']['state']
-        if states['@name'] == 'Step-by-step solution':
-            step_by_step_input = states['@input']   
-            return {"podstate":step_by_step_input, "format":"plaintext"}
+        for state in states:
+            if state['@name'] == 'Step-by-step solution':
+                return {"podstate": state['@input'], "format":"plaintext"}
     
     def process_subpod(self, subpods: List[Dict[str, Any]], pod_title: str) -> Dict[str, str]:
         """
@@ -115,15 +111,7 @@ class WolframAlphaAPI:
         output: Dict[str, Any] = {}
 
         # Check if 'pod' is a list or a dictionary
-        if isinstance(dirty_input['pod'], list):
-            for pod in dirty_input['pod']: 
-                subpod_data = pod['subpod']
-                if isinstance(subpod_data, list):
-                    output.update(self.process_subpod(subpod_data, pod['@title']))
-                elif subpod_data.get('plaintext'):
-                    output[pod['@title']] = subpod_data['plaintext']
-        else: # 'pod' is a single dictionary
-            pod = dirty_input['pod'] 
+        for pod in dirty_input['pod'] if isinstance(dirty_input['pod'], list) else [dirty_input['pod']]:
             subpod_data = pod['subpod']
             if isinstance(subpod_data, list):
                 output.update(self.process_subpod(subpod_data, pod['@title']))

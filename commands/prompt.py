@@ -125,12 +125,13 @@ def prompt(model: genai.GenerativeModel, tools: list):
                     response = await chat.send_message_async(response_parts, safety_settings=SAFETY)
                     
                 text = response.text
+                logging.info(f"Got Response.\n{text}")
+                
+                text = replace_sub_sup(text)
                 matches = re.findall(r"<thought>[\s\S]*?<\/thought>", text)
                 if matches:
                     for match in matches:
                         thought += f"{match}\n"
-                        
-                logging.info(f"Got Response.\n{text}")
                 
                 output = re.sub(r"<thought>[\s\S]*?<\/thought>", "", text)
                 await sendLongMessage(ctx, output, MAX_MESSAGE_LENGTH)

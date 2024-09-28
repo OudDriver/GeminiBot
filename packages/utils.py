@@ -6,7 +6,10 @@ import asyncio
 import logging
 import sys
 import io
+import re
 import nest_asyncio
+
+from packages.maps import subscript_map, superscript_map
 
 nest_asyncio.apply()
 
@@ -17,6 +20,27 @@ def generateUniqueFileName(extension):
     timestamp = int(time.time()) 
     randomStr = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     return f"{timestamp}_{randomStr}.{extension}"
+
+def replace_sub_sup(text: str):
+    """
+    Replaces <sub></sub> and <sup></sup> tags with their Unicode subscript and superscript equivalents.
+
+    Args:
+        text: The input string containing <sub></sub> and <sup></sup> tags.
+
+    Returns:
+        The string with the tags replaced by subscript and superscript characters.
+    """
+    def replace_sub(m):
+        return ''.join(subscript_map.get(c, c) for c in m.group(1))
+
+    def replace_sup(m):
+         return ''.join(superscript_map.get(c, c) for c in m.group(1))
+
+    text = re.sub(r'<sub>(.*?)</sub>', replace_sub, text)
+    text = re.sub(r'<sup>(.*?)</sup>', replace_sup, text)
+    
+    return text
 
 async def sendLongMessage(ctx, message, length):
     """Sends a long message in chunks."""

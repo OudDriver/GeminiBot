@@ -32,14 +32,18 @@ SAFETY = {
     HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: SAFETY_SETTING
 }
 
+thought = ""
+
 def prompt(model: genai.GenerativeModel, tools: list):
     chat = model.start_chat()
     @commands.command(name="prompt")
     async def command(ctx: commands.Context, *, message: str):
+        global ctxGlob, thought, output
         """
         Generates text based on a given message and optional image, video, audio attachments. Also supports YouTube link.
         """
         try:
+            ctxGlob = ctx
             async with ctx.typing():
                 if message.lower() == "{clear}":
                     for _ in range(len(chat.history) // 2):
@@ -121,9 +125,15 @@ def prompt(model: genai.GenerativeModel, tools: list):
                     response = await chat.send_message_async(response_parts, safety_settings=SAFETY)
                     
                 text = response.text
+                matches = re.findall(r"<thought>[\s\S]*?<\/thought>", text)
+                if matches:
+                    for match in matches:
+                        thought += f"{match}\n"
+                        
                 logging.info(f"Got Response.\n{text}")
                 
-                await sendLongMessage(ctx, text, MAX_MESSAGE_LENGTH)
+                output = re.sub(r"<thought>[\s\S]*?<\/thought>", "", text)
+                await sendLongMessage(ctx, output, MAX_MESSAGE_LENGTH)
         
         except ssl.SSLEOFError as e:
             errorMessage = f"`{e}`\nPerhaps, you can try your request again!"

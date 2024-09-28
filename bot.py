@@ -6,16 +6,18 @@ import logging
 
 from commands.prompt import prompt
 from commands.sync import sync
+from commands.get_latest_thought import get_latest_thought
 
 from packages.internet import search_duckduckgo, make_get_request, get_wikipedia_page
 from packages.weathermap import get_weather
 from packages.wolfram import WolframAlpha
+from packages.utils import timeout, hi, execute_code
 
 # Configuration
 CONFIG = json.load(open("config.json"))
 
 SYSTEM_PROMPT = CONFIG["SystemPrompt"]
-TOOLS = [search_duckduckgo, get_weather, WolframAlpha, make_get_request, get_wikipedia_page]
+TOOLS = [search_duckduckgo, get_weather, WolframAlpha, make_get_request, get_wikipedia_page, timeout, hi, execute_code]
 
 genai.configure(api_key=CONFIG['GeminiAPI'])
 
@@ -80,6 +82,7 @@ async def which(ctx: commands.Context):
 # Add commands
 client.add_command(prompt(model, TOOLS))
 client.add_command(sync)
+client.add_command(get_latest_thought)
 
 # Run the bot
 client.run(CONFIG['DiscordToken'])

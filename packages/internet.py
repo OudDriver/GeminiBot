@@ -107,7 +107,7 @@ def make_get_request(url: str, *kwargs: Any) -> str:
     
     try:
         with httpx.Client() as client:
-            response = client.get(url, params=params)
+            response = client.get(url, params=params, follow_redirects=True)
             response.raise_for_status()
             return response.text
     except httpx.HTTPError as exc:

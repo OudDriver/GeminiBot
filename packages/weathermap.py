@@ -33,8 +33,5 @@ def get_weather(city: str):
             logging.info(f"\n{output}")
             return output
 
-    try:
-        loop = asyncio.get_running_loop() 
-        return loop.run_until_complete(weather(city))
-    except RuntimeError:  # No event loop running
-        return asyncio.run(weather(city))
+    loop = asyncio.get_running_loop() 
+    return loop.run_until_complete(weather(city))

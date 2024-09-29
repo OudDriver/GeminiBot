@@ -87,22 +87,16 @@ def send(msg):
         from commands.prompt import ctxGlob
         await ctxGlob.send(msg)
         
-    try:
-        loop = asyncio.get_running_loop() 
-        return loop.run_until_complete(_send(msg))
-    except Exception as e:
-        logging.error(e)
+    loop = asyncio.get_running_loop() 
+    return loop.run_until_complete(_send(msg))
     
 def reply(msg):
     async def _reply(msg):
         from commands.prompt import ctxGlob
         await ctxGlob.reply(msg)
     
-    try:
-        loop = asyncio.get_running_loop() 
-        return loop.run_until_complete(_reply(msg))
-    except Exception as e:
-        logging.error(e)
+    loop = asyncio.get_running_loop() 
+    return loop.run_until_complete(_reply(msg))
     
 def hi():
     """
@@ -110,13 +104,13 @@ def hi():
     """
     async def _hi():
         await send("SassBot Said Hi!")
-        return ":D"
-        
-    try:
+        return "Sassbot Said Hi"
+    
+    try:    
         loop = asyncio.get_running_loop() 
         return loop.run_until_complete(_hi())
-    except RuntimeError:  # No event loop running
-        return asyncio.run(_hi())
+    except TypeError:
+        pass
     
 def execute_code(code_string: str):
     """Executes Python code from a string and captures the output.
@@ -126,7 +120,7 @@ def execute_code(code_string: str):
         global_namespace: Optional dictionary to use as the global namespace.
 
     Returns:
-        The standard output (stdout) captured during code execution.
+        The standard output or standard error captured during code execution
     """
     cstring = code_string.encode().decode('unicode_escape')
     

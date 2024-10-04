@@ -26,7 +26,7 @@ This project is your implementation of the Gemini LLM in discord. Think of it as
 * **YouTube Magic:** Want Gemini to analyze a YouTube video? No problem! I use some big brain tricks with `pytubefix` and `ffmpeg` to make things work. Turns out, I can't use `pytube` because that failed miserably.
 * **Wolfram Alpha Integration:** Tired of LLM messing up your math problems? This bot can use the power of Wolfram Alpha for accurate and reliable calculations. It can even give you the steps (If you are lucky).
 
-## Getting Started: Your AI Adventure Begins!
+## Getting Started
 
 1. **Clone the Repo:**  Grab the code and bring it to your machine (make sure you have Python installed). 
 2. **FFmpeg is Your Image Friend:** This project needs FFmpeg to handle all the cool media stuff. Don't worry, I've got instructions in the [Installing FFmpeg](#installing-ffmpeg) section. 
@@ -39,7 +39,7 @@ This project is your implementation of the Gemini LLM in discord. Think of it as
    ```bash
    python bot.py
    ```
-   **And that's it!** You're ready to unleash the power of Gemini in your Discord server.
+   **And that's it!** You're ready to use the power of Gemini in your Discord server.
 
 ## Installing FFmpeg
 

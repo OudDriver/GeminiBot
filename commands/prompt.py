@@ -34,8 +34,7 @@ SAFETY = {
 
 thought = ""
 
-def prompt(model: genai.GenerativeModel, tools: list):
-    chat = model.start_chat()
+def prompt(tools: list):
     @commands.command(name="prompt")
     async def command(ctx: commands.Context, *, message: str):
         global ctxGlob, thought, output
@@ -43,6 +42,12 @@ def prompt(model: genai.GenerativeModel, tools: list):
         Generates text based on a given message and optional image, video, audio attachments. Also supports YouTube link.
         """
         try:
+            TEMP_CONFIG = open("temp/workaround.json")
+            configs = json.load(TEMP_CONFIG)
+            
+            model = genai.GenerativeModel(configs['model'], SAFETY_SETTING, system_instruction=configs['system_prompt'])
+            
+            chat = model.start_chat()
             ctxGlob = ctx
             async with ctx.typing():
                 if message.lower() == "{clear}":

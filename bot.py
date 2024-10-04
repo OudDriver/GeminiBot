@@ -16,10 +16,14 @@ from packages.utils import timeout, hi, execute_code
 # Configuration
 CONFIG = json.load(open("config.json"))
 
-SYSTEM_PROMPT = CONFIG["SystemPrompt"]
+SYSTEM_PROMPTS = CONFIG["SystemPrompts"]
 TOOLS = [search_duckduckgo, get_weather, WolframAlpha, make_get_request, get_wikipedia_page, timeout, hi, execute_code]
 
 genai.configure(api_key=CONFIG['GeminiAPI'])
+
+current_sys_prompt_index = 0
+system_prompt = SYSTEM_PROMPTS[current_sys_prompt_index]
+system_prompt_data =  system_prompt['SystemPrompt']
 
 # Model Options and Index
 model_options = [
@@ -28,7 +32,9 @@ model_options = [
 ]
 
 current_model_index = 0
-model = genai.GenerativeModel(model_options[current_model_index], tools=TOOLS, system_instruction=SYSTEM_PROMPT)
+model = model_options[current_model_index]
+with open("temp/workaround.json", "w") as TEMP_CONFIG:
+    json.dump({"model": model, "system_prompt": system_prompt_data}, TEMP_CONFIG, indent=4)
 
 # Discord Bot Setup
 intents = discord.Intents.default()
@@ -52,20 +58,41 @@ logging.basicConfig(level=logging.INFO,  # Set default logging level
 # On start event
 @client.event
 async def on_ready():
-    logging.info(f'Logged in as {client.user}. Using {model.model_name}')
-    friendly_name = model_names[model.model_name]
+    logging.info(f'Logged in as {client.user}. Using {model_options[current_model_index]}')
+    friendly_name = model_names['models/' + model_options[current_model_index]]
     await client.change_presence(activity=discord.CustomActivity(name=f'Hello there! I am using {friendly_name}'))
 
+
+@client.command(name="toggle_sys")
+async def toggle_sys(ctx: commands.Context):
+    global model, current_sys_prompt_index, current_model_index
+    
+    current_model_index = (current_model_index + 1) % len(model_options)
+    selected_model = model_options[current_model_index]
+    
+    current_sys_prompt_index = (current_sys_prompt_index + 1) % len(SYSTEM_PROMPTS)
+    system_prompt = SYSTEM_PROMPTS[current_sys_prompt_index]
+    system_prompt_data =  system_prompt['SystemPrompt']
+    system_prompt_name = system_prompt['Name']
+    
+    with open("temp/workaround.json", "w") as TEMP_CONFIG:
+        json.dump({"model": selected_model, "system_prompt": system_prompt_data}, TEMP_CONFIG, indent=4)
+    
+    await ctx.send(f"Using {system_prompt_name}.")
 
 # Toggles to other bots
 @client.command(name="toggle")
 async def toggle(ctx: commands.Context):
-    global model, current_model_index
+    global current_model_index
 
     current_model_index = (current_model_index + 1) % len(model_options)
     selected_model = model_options[current_model_index]
-
-    model = genai.GenerativeModel(selected_model, tools=TOOLS, system_instruction=SYSTEM_PROMPT)
+    
+    system_prompt = SYSTEM_PROMPTS[current_sys_prompt_index]
+    system_prompt_data =  system_prompt['SystemPrompt']
+    
+    with open("temp/workaround.json", "w") as TEMP_CONFIG:
+        json.dump({"model": selected_model, "system_prompt": system_prompt_data}, TEMP_CONFIG, indent=4)
 
     friendly_name = model_names['models/' + selected_model]
     await ctx.send(f"Switched to {friendly_name}")
@@ -75,12 +102,12 @@ async def toggle(ctx: commands.Context):
 
 @client.command(name="which")
 async def which(ctx: commands.Context):
-    friendly_name = model_names['models/' + model.model_name]
+    friendly_name = model_names['models/' + model_options[current_model_index]]
     await ctx.send(f"You are using {friendly_name}")
 
 
 # Add commands
-client.add_command(prompt(model, TOOLS))
+client.add_command(prompt(TOOLS))
 client.add_command(sync)
 client.add_command(get_latest_thought)
 

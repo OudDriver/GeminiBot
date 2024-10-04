@@ -4,6 +4,15 @@
   "OwnerID": "Your Owner ID",
   "WolframAPI": "Your Wolfram API App ID",
   "BadWords": ["Your", "Bad", "Words"],
-  "SystemPrompt": "Your System Prompt",
+  "SystemPrompts": [
+    {
+      "Name": "System Prompt Number 1",
+      "SystemPrompt": "Your Actual System Prmopt."
+    },
+    {
+      "Name": "System Prompt Number 2",
+      "SystemPrompt": "Your Actual System Prmopt."
+    }
+  ],
   "HarmBlockThreshold": "BLOCK_LOW_AND_ABOVE, BLOCK_MEDIUM_AND_ABOVE, BLOCK_ONLY_HIGH, BLOCK_NONE"
 }

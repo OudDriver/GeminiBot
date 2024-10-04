@@ -33,11 +33,12 @@ SAFETY = {
 }
 
 thought = ""
+memory = None
 
 def prompt(tools: list):
     @commands.command(name="prompt")
     async def command(ctx: commands.Context, *, message: str):
-        global ctxGlob, thought, output
+        global ctxGlob, thought, output, memory
         """
         Generates text based on a given message and optional image, video, audio attachments. Also supports YouTube link.
         """
@@ -47,14 +48,18 @@ def prompt(tools: list):
             
             model = genai.GenerativeModel(configs['model'], SAFETY_SETTING, system_instruction=configs['system_prompt'])
             
-            chat = model.start_chat()
+            if not memory:
+                chat = model.start_chat()
+            else:
+                chat = model.start_chat(history=memory)
+                
             ctxGlob = ctx
             async with ctx.typing():
                 if message.lower() == "{clear}":
                     for _ in range(len(chat.history) // 2):
-                        chat.rewind()
+                        memory = []
                         
-                    print(chat.history)
+                    print(memory)
                     await ctx.reply("Alright, I have cleared my context. What are we gonna talk about?")
                     return
                 
@@ -132,6 +137,8 @@ def prompt(tools: list):
                 text = response.text
                 logging.info(f"Got Response.\n{text}")
                 
+                memory = chat.history
+                
                 text = replace_sub_sup(text)
                 matches = re.findall(r"<thought>[\s\S]*?<\/thought>", text)
                 if matches:
@@ -147,7 +154,7 @@ def prompt(tools: list):
             await sendLongMessage(ctx, errorMessage, MAX_MESSAGE_LENGTH)
         
         except genai.types.StopCandidateException as e:
-            await sendLongMessage(ctx, f"Your prompt is not safe! Try again with a safer prompt.", MAX_MESSAGE_LENGTH)
+            await sendLongMessage(ctx, f"{e}\nThat means your prompt isn't safe! Try again!", MAX_MESSAGE_LENGTH)
             
         except Exception as e:
             errorMessage = traceback.format_exc()

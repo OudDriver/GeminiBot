@@ -6,7 +6,7 @@ import logging
 
 from commands.prompt import prompt
 from commands.sync import sync
-from commands.get_latest_thought import get_latest_thought
+from commands.get_latest_thought import get_thought
 
 from packages.internet import search_duckduckgo, make_get_request, get_wikipedia_page
 from packages.weathermap import get_weather
@@ -109,7 +109,7 @@ async def which(ctx: commands.Context):
 # Add commands
 client.add_command(prompt(TOOLS))
 client.add_command(sync)
-client.add_command(get_latest_thought)
+client.add_command(get_thought)
 
 # Run the bot
 client.run(CONFIG['DiscordToken'])

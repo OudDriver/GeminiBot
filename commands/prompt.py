@@ -36,7 +36,7 @@ thought = ""
 memory = None
 
 def prompt(tools: list):
-    @commands.command(name="prompt")
+    @commands.hybrid_command(name="prompt")
     async def command(ctx: commands.Context, *, message: str):
         global ctxGlob, thought, output, memory
         """
@@ -140,10 +140,11 @@ def prompt(tools: list):
                 memory = chat.history
                 
                 text = replace_sub_sup(text)
-                matches = re.findall(r"<thought>[\s\S]*?<\/thought>", text)
+                matches = re.findall(r"\n<thought>[\s\S]*?<\/thought>\n", text)
                 if matches:
                     for match in matches:
                         thought += f"{match}\n"
+                        output += "(This reply have a thought)"
                 
                 output = re.sub(r"<thought>[\s\S]*?<\/thought>", "", text)
                 await sendLongMessage(ctx, output, MAX_MESSAGE_LENGTH)

@@ -1,7 +1,7 @@
 from discord.ext import commands
 
 @commands.hybrid_command()
-async def get_thought(ctx: commands.Context):
+async def thought(ctx: commands.Context):
     from commands.prompt import thought
     
     if not thought:

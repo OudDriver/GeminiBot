@@ -4,6 +4,12 @@
   "OwnerID": "Your Owner ID",
   "WolframAPI": "Your Wolfram API App ID",
   "BadWords": ["Your", "Bad", "Words"],
+  "ModelNames": {
+    "gemini-1.5-flash-8b-exp-0827": "Gemini 1.5 Flash 8B Experimental 0827",
+    "gemini-1.5-flash-exp-0827": "Gemini 1.5 Flash Experimental 0827",
+    "gemini-1.5-pro-exp-0827": "Gemini 1.5 Pro Experimental 0827",
+    "model-name-id": "Clean Model Name"
+  },
   "SystemPrompts": [
     {
       "Name": "System Prompt Number 1",

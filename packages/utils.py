@@ -1,3 +1,4 @@
+from datetime import timedelta
 import time
 import random
 import string
@@ -21,7 +22,7 @@ def generateUniqueFileName(extension):
     randomStr = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     return f"{timestamp}_{randomStr}.{extension}"
 
-def replace_sub_sup(text: str):
+def clean_text(text: str):
     """
     Replaces <sub></sub> and <sup></sup> tags with their Unicode subscript and superscript equivalents.
 
@@ -40,7 +41,11 @@ def replace_sub_sup(text: str):
     text = re.sub(r'<sub>(.*?)</sub>', replace_sub, text)
     text = re.sub(r'<sup>(.*?)</sup>', replace_sup, text)
     
-    return text
+    matches = re.findall(r"\n<thought>[\s\S]*?<\/thought>\n", text)
+    text = re.sub(r"\n<thought>[\s\S]*?<\/thought>\n", "", text)
+    text = re.sub(r"\n<br>", "", text)
+    
+    return text, matches
 
 async def sendLongMessage(ctx, message, length):
     """Sends a long message in chunks."""
@@ -48,7 +53,7 @@ async def sendLongMessage(ctx, message, length):
         await ctx.reply(message[i:i + length])
         
 def timeout(member_id: int, duration: int= 60, reason: str = None):
-    """Timeouts a Discord member using their ID for a specified duration.
+    """Timeouts a Discord member using their ID for a specified duration. (It actually works)
 
         Args:
             member_id: The user's ID.
@@ -63,24 +68,23 @@ def timeout(member_id: int, duration: int= 60, reason: str = None):
         
         guild = ctxGlob.guild
         try:
-            member = guild.get_member(member_id)
+            member = await guild.fetch_member(member_id)
             if member is None:
                 await ctxGlob.send("Member not found in this server.")
                 return
 
-            await member.timeout(discord.utils.utcnow() + discord.utils.compute_timedelta(seconds=duration), reason=reason)
+            await member.timeout(timedelta(seconds=duration), reason=reason)
             await ctxGlob.send(f"Member with ID {member_id} has been timed out for {duration} seconds. Reason: {reason}")
             return f"Succesful! Member with ID {member_id} has been timed out for {duration} seconds. Reason: {reason}"
         except discord.Forbidden:
+            await ctxGlob.send("Missing Permission!")
             return "Missing Permissions. Ping <@578997249741160467> to fix."
         except discord.HTTPException as e:
+            await ctxGlob.send(e)
             return f"Something Happened. {e}"
         
-    try:
-        loop = asyncio.get_running_loop() 
-        return loop.run_until_complete(_mute(member_id, duration, reason))
-    except RuntimeError:  # No event loop running
-        return asyncio.run(_mute(member_id, duration, reason))
+    loop = asyncio.get_running_loop() 
+    return loop.run_until_complete(_mute(member_id, duration, reason))
 
 def send(msg):
     async def _send(msg):
@@ -100,17 +104,14 @@ def reply(msg):
     
 def hi():
     """
-    Just says hi! Do whatever you want with this function! (Well, it is actually just a test function)
+    A test function that says hi.
     """
     async def _hi():
         await send("SassBot Said Hi!")
         return "Sassbot Said Hi"
-    
-    try:    
-        loop = asyncio.get_running_loop() 
-        return loop.run_until_complete(_hi())
-    except TypeError:
-        pass
+       
+    loop = asyncio.get_running_loop() 
+    return loop.run_until_complete(_hi())
     
 def execute_code(code_string: str):
     """Executes Python code from a string and captures the output.
@@ -140,9 +141,11 @@ def execute_code(code_string: str):
     except Exception as e:
         # Capture the error message
         captured_stderr.write(f"Error during code execution: {e}") 
-        logging.info(captured_stderr.getvalue())
         final = f"Code:\n```py\n{cstring}\n```\nError:`{captured_stderr.getvalue()}`"
+        
+        logging.info(captured_stderr.getvalue())
         reply(final)
+        
         return captured_stderr.getvalue()
     finally:
         # Restore stdout and stderr
@@ -152,3 +155,4 @@ def execute_code(code_string: str):
     final = f"Code:\n```py\n{cstring}\n```\nOutput:\n```\n{captured_stdout.getvalue()}\n```"
     reply(final)
     return captured_stdout.getvalue()
+

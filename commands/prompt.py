@@ -1,3 +1,4 @@
+from anyio import fail_after
 import google.generativeai as genai
 import logging
 import re
@@ -43,41 +44,41 @@ def prompt(tools: list):
         Generates text based on a given message and optional image, video, audio attachments. Also supports YouTube link.
         """
         try:
-            TEMP_CONFIG = open("temp/workaround.json")
-            configs = json.load(TEMP_CONFIG)
-            
-            model = genai.GenerativeModel(configs['model'], SAFETY_SETTING, system_instruction=configs['system_prompt'])
-            
-            if not memory:
-                chat = model.start_chat()
-            else:
-                chat = model.start_chat(history=memory)
-                
+            # Load configuration from temporary JSON file
+            with open("temp/workaround.json", "r") as TEMP_CONFIG:
+                configs = json.load(TEMP_CONFIG)
+
+            # Initialize the GenAI model with configuration and safety settings
+            model = genai.GenerativeModel(configs['model'], SAFETY_SETTING, system_instruction=configs['system_prompt'], tools=tools)
+
+            # Start a new chat or resume from existing memory
+            chat = model.start_chat(history=memory) if memory else model.start_chat()
             ctxGlob = ctx
             async with ctx.typing():
+                # Clear context if message is {clear}
                 if message.lower() == "{clear}":
-                    for _ in range(len(chat.history) // 2):
-                        memory = []
-                        
-                    print(memory)
+                    memory = []
                     await ctx.reply("Alright, I have cleared my context. What are we gonna talk about?")
                     return
                 
+                # Check for bad words and handle accordingly
                 for word in CONFIG["BadWords"]:
                     if word in ctx.message.content.lower():
                         await ctx.message.delete()
                         await ctx.author.timeout(datetime.timedelta(minutes=10), reason="Saying a word blocked in config.json")
-                        await ctx.send(f"Chill <@{ctx.author.id}>! Don't be racist like that.")
+                        await ctx.send(f"Chill <@{ctx.author.id}>! Don't say things like that.")
                         return
                 
                 logging.info(f"Received Input With Prompt: {message}")
                 
+                # Preprocessing and handling attachments/links
                 finalPrompt = [YOUTUBE_PATTERN.sub("", message)]
                 fileNames = []
                 uploadedFiles = []
 
                 link = YOUTUBE_PATTERN.search(message)
 
+                # Download the files and upload them
                 if link:
                     logging.info(f"Found Link {link}")
                     fileNamesFromFunc, uploadedFilesFromFunc = await handleYoutube(link)
@@ -92,12 +93,14 @@ def prompt(tools: list):
                     fileNames.extend(result[0])
                     uploadedFiles.extend(result[1])
 
+                # Waits until the file is active
                 if uploadedFiles:
                     for uploadedFile in uploadedFiles:
                         await waitForFileActive(uploadedFile)
                         logging.info(f"{genai.get_file(uploadedFile.name).display_name} is active at server")
                         finalPrompt.append(uploadedFile)
 
+                # Added context, such as the reply and the  user
                 if ctx.message.reference:
                     reply = await ctx.channel.fetch_message(ctx.message.reference.message_id)
                     finalPrompt.insert(0, f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id} Replied To \"{reply.content}\": ")
@@ -110,44 +113,57 @@ def prompt(tools: list):
                 
                 func_call_result = {}
                 function_call = False
+                    
+                # Loops until there is no more function calling left.
+                while True:
+                    # Manual function calling system
+                    for part in response.parts:
+                        if fn := part.function_call:
+                            function_call = True
+                            
+                            # Joins the arguments
+                            arg_output = ", ".join(f"{key}={val}" for key, val in fn.args.items())
+                            logging.info(f"{fn.name}({arg_output})")
+                            
+                            # Finds the function
+                            func = None
+                            for f in tools:
+                                if f.__name__ == fn.name:
+                                    func = f
+                                    break
+                            
+                            args = fn.args
+                            
+                            # Calls the function
+                            result = func(**args)
+                            func_call_result[fn.name] = result
+                            
+                    if function_call == True:
+                        # Adds the function calling output
+                        response_parts = [
+                            genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fn, response={"result": val})) for fn, val in func_call_result.items()
+                        ]
+                        response = await chat.send_message_async(response_parts, safety_settings=SAFETY)
+                        function_call = False
+                        
+                    else:
+                        break
                 
-                for part in response.parts:
-                    if fn := part.function_call:
-                        function_call = True
-                        arg_output = ", ".join(f"{key}={val}" for key, val in fn.args.items())
-                        logging.info(f"{fn.name}({arg_output})")
-                        
-                        func = None
-                        for f in tools:
-                            if f.__name__ == fn.name:
-                                func = f
-                                break
-                        
-                        args = fn.args
-                        
-                        result = func(**args)
-                        func_call_result[fn.name] = result
                 
-                if function_call == True:
-                    response_parts = [
-                        genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fn, response={"result": val})) for fn, val in func_call_result.items()
-                    ]
-                    response = await chat.send_message_async(response_parts, safety_settings=SAFETY)
                     
                 text = response.text
                 logging.info(f"Got Response.\n{text}")
                 
-                memory = chat.history
+                memory = chat.history 
                 
-                text = replace_sub_sup(text)
-                matches = re.findall(r"\n<thought>[\s\S]*?<\/thought>\n", text)
+                text, matches = clean_text(text)
+                thought = ""
                 if matches:
                     for match in matches:
                         thought += f"{match}\n"
-                        output += "(This reply have a thought)"
+                    text += "(This reply have a thought)"
                 
-                output = re.sub(r"<thought>[\s\S]*?<\/thought>", "", text)
-                await sendLongMessage(ctx, output, MAX_MESSAGE_LENGTH)
+                await sendLongMessage(ctx, text, MAX_MESSAGE_LENGTH)
         
         except ssl.SSLEOFError as e:
             errorMessage = f"`{e}`\nPerhaps, you can try your request again!"
@@ -158,9 +174,8 @@ def prompt(tools: list):
             await sendLongMessage(ctx, f"{e}\nThat means your prompt isn't safe! Try again!", MAX_MESSAGE_LENGTH)
             
         except Exception as e:
-            errorMessage = traceback.format_exc()
-            logging.exception(f"Error: {errorMessage}")
-            await sendLongMessage(ctx, f"`{traceback.format_exception_only(e)[0]}`", MAX_MESSAGE_LENGTH)
+            await sendLongMessage(ctx, f"`{e}`", MAX_MESSAGE_LENGTH)
+            logging.exception(f"\n{e}")
 
         finally:
             try:

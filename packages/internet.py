@@ -14,8 +14,6 @@ with open('config.json') as f:
 
 genai.configure(api_key=config['GeminiAPI'])
 
-model = genai.GenerativeModel("gemini-1.5-pro-exp-0827")
-
 def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = True, regular_search_queries: bool = True, get_website_content: bool = False) -> list[dict]:
     """Searches DuckDuckGo for a given query and returns a list of results.
 

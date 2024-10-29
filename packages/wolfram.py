@@ -56,7 +56,7 @@ class WolframAlphaAPI:
         """
         return xmltodict.parse(xml_string)
     
-    async def find_steps_input(self, input_string):
+    async def _find_steps_input(self, input_string):
         temp_response = await self._make_request("query", input_string)
         temp_doc = await self._parse_xml(temp_response.content)
         temp_doc = temp_doc['queryresult']
@@ -74,8 +74,10 @@ class WolframAlphaAPI:
         for state in states:
             if state['@name'] == 'Step-by-step solution':
                 return {"podstate": state['@input'], "format":"plaintext"}
-    
-    def process_subpod(self, subpods: List[Dict[str, Any]], pod_title: str) -> Dict[str, str]:
+            
+        return None 
+
+    def _process_subpod(self, subpods: List[Dict[str, Any]], pod_title: str) -> Dict[str, str]:
         """
         Helper function to process subpods and populate output.
 
@@ -89,13 +91,13 @@ class WolframAlphaAPI:
         output: Dict[str, str] = {}
         for subpod in subpods:
             if re.search("steps", subpod['@title']):
-                output[subpod['@title']] = subpod['plaintext']
+                output[subpod['@title']] = subpod.get('plaintext', 'No plain text available') 
             else:
                 output.setdefault(pod_title, []).append(subpod['plaintext'])
         
         return output
     
-    def clean_up(self, dirty_input: Dict[str, Any]) -> Dict[str, Any]:
+    def _clean_up(self, dirty_input: Dict[str, Any]) -> Dict[str, Any]:
         """
         Cleans up the output from Wolfram Alpha API.
 
@@ -114,7 +116,7 @@ class WolframAlphaAPI:
         for pod in dirty_input['pod'] if isinstance(dirty_input['pod'], list) else [dirty_input['pod']]:
             subpod_data = pod['subpod']
             if isinstance(subpod_data, list):
-                output.update(self.process_subpod(subpod_data, pod['@title']))
+                output.update(self._process_subpod(subpod_data, pod['@title']))
             elif subpod_data.get('plaintext'):
                 output[pod['@title']] = subpod_data['plaintext']
 
@@ -140,7 +142,7 @@ class WolframAlphaFullAPI(WolframAlphaAPI):
         configs = {}
         
         if show_steps:
-            show_steps_input = await self.find_steps_input(input_string)
+            show_steps_input = await self._find_steps_input(input_string)
             configs.update(show_steps_input)
         
         response = await self._make_request("query", input_string, **configs, **kwargs)
@@ -151,7 +153,7 @@ class WolframAlphaFullAPI(WolframAlphaAPI):
 
 def WolframAlpha(query: str, show_steps: bool = False, raw: bool = False):
     """
-    Sends a query to the Wolfram Alpha Full API. Wolfram Alpha can answer simple facts to hard math questions.
+    Sends a query to the Wolfram Alpha Full API. WolframAlpha can answer the simplest math questions to hard math questions.
     
     Args:
         input_string: The input string for the query.
@@ -163,14 +165,9 @@ def WolframAlpha(query: str, show_steps: bool = False, raw: bool = False):
     """
     client = WolframAlphaFullAPI(json.load(open("config.json"))['WolframAPI'])
     
-    try:
-        loop = asyncio.get_running_loop()
-        output = client.clean_up(loop.run_until_complete(client.query(query, show_steps)))
-    except RuntimeError:
-        output = client.clean_up(asyncio.run(client.query(query, show_steps)))
+    loop = asyncio.get_running_loop()
+    output = loop.run_until_complete(client.query(query, show_steps))
     
     logging.info(output)
     
-    if raw:
-        return query
-    return output
+    return output if raw else client._clean_up(output)

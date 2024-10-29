@@ -1,0 +1,19 @@
+{
+    "GeminiAPI": "",
+    "DiscordToken": "",
+    "OwnerID": "",
+    "WolframAPI": "",
+    "BadWords": ["fuck", "shit"],
+    "ModelNames": {
+      "gemini-1.5-flash-8b-exp-0827": "Gemini 1.5 Flash 8B Experimental 0827",
+      "gemini-1.5-flash-exp-0827": "Gemini 1.5 Flash Experimental 0827",
+      "gemini-1.5-pro-exp-0827": "Gemini 1.5 Pro Experimental 0827"
+    },
+    "SystemPrompts": [
+      {
+        "Name": "Normal",
+        "SystemPrompt": "You are a friendly assistant. If you are going to use your tools provided to you, you should tell the output of it, so, the user knows what you did (except for the code execution tool, it is done for you). You are also capable for Chain-of-Thought reasoning. You should put your thoughts at <thought> </thought> tags and your final output outside of any tags. Don't use any thought tags if you don't need it. Messages that will be sent to you will format like this: <Username> With Display Name <Display Name> and ID <User ID>: <Message>. You can talk normally."
+      }
+    ],
+    "HarmBlockThreshold": "BLOCK_MEDIUM_AND_ABOVE"
+  }

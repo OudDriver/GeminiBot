@@ -34,7 +34,7 @@ This project is your implementation of the Gemini LLM in discord. Think of it as
    ```bash
    pip install -r requirements.txt
    ```
-4. **Configure Your Bot:** Rename `config.example.json` to `config.json` and fill in your bot's details (API keys, etc.). 
+4. **Configure Your Bot:** Rename `config.example.json` to `config.json` and fill in your bot's details (API keys, etc.), or rename `config.template.json` to `config.json` and fill in the missing blanks.
 5. **Launch GeminiBot!**  From your bot's directory, run:
    ```bash
    python bot.py

@@ -9,3 +9,14 @@ async def thought(ctx: commands.Context):
         return
     
     await ctx.send(thought)
+
+@commands.hybrid_command()
+@commands.has_permissions(administrator=True)
+async def secret(ctx: commands.Context):
+    from commands.prompt import secrets
+    
+    if not secrets:
+        await ctx.send("None", ephemeral=True)
+        return
+    
+    await ctx.send(secrets, ephemeral=True)

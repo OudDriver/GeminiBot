@@ -14,13 +14,13 @@ from packages.maps import subscript_map, superscript_map
 
 nest_asyncio.apply()
 
-def generateUniqueFileName(extension):
+def generate_unique_file_name(extension):
     """
     Generates a unique filename using the current timestamp and a random string.
     """
     timestamp = int(time.time()) 
-    randomStr = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-    return f"{timestamp}_{randomStr}.{extension}"
+    random_str = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+    return f"{timestamp}_{random_str}.{extension}"
 
 def clean_text(text: str):
     """
@@ -41,13 +41,15 @@ def clean_text(text: str):
     text = re.sub(r'<sub>(.*?)</sub>', replace_sub, text)
     text = re.sub(r'<sup>(.*?)</sup>', replace_sup, text)
     
-    matches = re.findall(r"\n<thought>[\s\S]*?<\/thought>\n", text)
-    text = re.sub(r"\n<thought>[\s\S]*?<\/thought>\n", "", text)
+    thought_matches = re.findall(r"<thought>[\s\S]*?</thought>", text)
+    secret_matches = re.findall(r"<store>[\s\S]*?</store>", text)
+    text = re.sub(r"<thought>[\s\S]*?</thought>", "", text)
+    text = re.sub(r"<store>[\s\S]*?</store>", "", text)
     text = re.sub(r"\n<br>", "", text)
     
-    return text, matches
+    return text, thought_matches, secret_matches
 
-async def sendLongMessage(ctx, message, length):
+async def send_long_message(ctx, message, length):
     """Sends a long message in chunks."""
     for i in range(0, len(message), length):
         await ctx.reply(message[i:i + length])
@@ -60,22 +62,22 @@ def timeout(member_id: int, duration: int= 60, reason: str = None):
             duration: Duration in seconds. Default is 60 seconds.
             reason: The reason why the user is timed out.
     """
-    async def _mute(member_id: int, duration: int, reason: str = None):
-        if duration <= 0:
+    async def _mute(mem_id: int, dur: int, r: str = None):
+        if dur <= 0:
             return "Time must be a positive integer"
         
         from commands.prompt import ctxGlob
         
         guild = ctxGlob.guild
         try:
-            member = await guild.fetch_member(member_id)
+            member = await guild.fetch_member(mem_id)
             if member is None:
                 await ctxGlob.send("Member not found in this server.")
                 return
 
-            await member.timeout(timedelta(seconds=duration), reason=reason)
-            await ctxGlob.send(f"Member with ID {member_id} has been timed out for {duration} seconds. Reason: {reason}")
-            return f"Succesful! Member with ID {member_id} has been timed out for {duration} seconds. Reason: {reason}"
+            await member.timeout(timedelta(seconds=dur), reason=r)
+            await ctxGlob.send(f"Member with ID {mem_id} has been timed out for {dur} seconds. Reason: {r}")
+            return f"Successful! Member with ID {mem_id} has been timed out for {dur} seconds. Reason: {r}"
         except discord.Forbidden:
             await ctxGlob.send("Missing Permission!")
             return "Missing Permissions. Ping <@578997249741160467> to fix."
@@ -86,21 +88,21 @@ def timeout(member_id: int, duration: int= 60, reason: str = None):
     loop = asyncio.get_running_loop() 
     return loop.run_until_complete(_mute(member_id, duration, reason))
 
-def send(msg):
+def send(message: str):
     async def _send(msg):
         from commands.prompt import ctxGlob
         await ctxGlob.send(msg)
         
     loop = asyncio.get_running_loop() 
-    return loop.run_until_complete(_send(msg))
+    return loop.run_until_complete(_send(message))
     
-def reply(msg):
+def reply(message: str):
     async def _reply(msg):
         from commands.prompt import ctxGlob
         await ctxGlob.reply(msg)
     
     loop = asyncio.get_running_loop() 
-    return loop.run_until_complete(_reply(msg))
+    return loop.run_until_complete(_reply(message))
     
 def hi():
     """
@@ -118,14 +120,13 @@ def execute_code(code_string: str):
 
     Args:
         code_string: The string containing the Python code to execute.
-        global_namespace: Optional dictionary to use as the global namespace.
 
     Returns:
         The standard output or standard error captured during code execution
     """
-    cstring = code_string.encode().decode('unicode_escape')
+    encoded_string = code_string.encode().decode('unicode_escape')
     
-    logging.info('\n' + cstring)
+    logging.info('\n' + encoded_string)
 
     # Redirect stdout and stderr to capture output
     old_stdout = sys.stdout
@@ -137,11 +138,11 @@ def execute_code(code_string: str):
     global_namespace = {}
     try:
         # Execute the code in the custom global namespace
-        exec(cstring, global_namespace)
+        exec(encoded_string, global_namespace)
     except Exception as e:
         # Capture the error message
         captured_stderr.write(f"Error during code execution: {e}") 
-        final = f"Code:\n```py\n{cstring}\n```\nError:`{captured_stderr.getvalue()}`"
+        final = f"Code:\n```py\n{encoded_string}\n```\nError:`{captured_stderr.getvalue()}`"
         
         logging.info(captured_stderr.getvalue())
         reply(final)
@@ -152,7 +153,7 @@ def execute_code(code_string: str):
         sys.stdout = old_stdout
         sys.stderr = old_stderr
 
-    final = f"Code:\n```py\n{cstring}\n```\nOutput:\n```\n{captured_stdout.getvalue()}\n```"
+    final = f"Code:\n```py\n{encoded_string}\n```\nOutput:\n```\n{captured_stdout.getvalue()}\n```"
     reply(final)
     return captured_stdout.getvalue()
 

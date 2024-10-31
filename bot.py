@@ -6,11 +6,11 @@ import logging
 
 from commands.prompt import prompt
 from commands.sync import sync
-from commands.thought import thought
+from commands.thought import thought, secret
 
 from packages.internet import search_duckduckgo, make_get_request, get_wikipedia_page
 from packages.weathermap import get_weather
-from packages.wolfram import WolframAlpha
+from packages.wolfram import wolfram_alpha
 from packages.utils import timeout, hi, execute_code
 
 # Config File
@@ -18,7 +18,7 @@ CONFIG = json.load(open("config.json"))
 
 # System Prompt and Tools for the bot
 SYSTEM_PROMPTS = CONFIG["SystemPrompts"]
-TOOLS = [search_duckduckgo, get_weather, WolframAlpha, make_get_request, get_wikipedia_page, timeout, hi, execute_code]
+TOOLS = [search_duckduckgo, get_weather, wolfram_alpha, make_get_request, get_wikipedia_page, timeout, hi, execute_code]
 
 genai.configure(api_key=CONFIG['GeminiAPI'])
 
@@ -34,7 +34,7 @@ model_options = [key for key in CONFIG["ModelNames"]]
 current_model_index = 0
 model = model_options[current_model_index]
 with open("temp/workaround.json", "w") as TEMP_CONFIG:
-    json.dump({"model": model, "system_prompt": system_prompt_data}, TEMP_CONFIG, indent=4)
+    TEMP_CONFIG.write(json.dumps({"model": model, "system_prompt": system_prompt_data}, indent=4))
 
 # Discord Bot Setup
 intents = discord.Intents.default()
@@ -67,13 +67,13 @@ async def toggle_sys(ctx: commands.Context):
     
     # Gets the system prompt using the index
     current_sys_prompt_index = (current_sys_prompt_index + 1) % len(SYSTEM_PROMPTS)
-    system_prompt = SYSTEM_PROMPTS[current_sys_prompt_index]
-    system_prompt_data =  system_prompt['SystemPrompt']
-    system_prompt_name = system_prompt['Name']
+    changed_system_prompt = SYSTEM_PROMPTS[current_sys_prompt_index]
+    changed_system_prompt_data =  changed_system_prompt['SystemPrompt']
+    system_prompt_name = changed_system_prompt['Name']
     
     # Saves the info to the file
-    with open("temp/workaround.json", "w") as TEMP_CONFIG:
-        json.dump({"model": selected_model, "system_prompt": system_prompt_data}, TEMP_CONFIG, indent=4)
+    with open("temp/workaround.json", "w") as SYS_TEMP_CONFIG:
+        SYS_TEMP_CONFIG.write(json.dumps({"model": selected_model, "system_prompt": changed_system_prompt_data}, indent=4))
     
     await ctx.send(f"Using {system_prompt_name}.")
 
@@ -87,12 +87,12 @@ async def toggle(ctx: commands.Context):
     selected_model = model_options[current_model_index]
     
     # Gets the system prompt
-    system_prompt = SYSTEM_PROMPTS[current_sys_prompt_index]
-    system_prompt_data =  system_prompt['SystemPrompt']
+    current_system_prompt = SYSTEM_PROMPTS[current_sys_prompt_index]
+    current_system_prompt_data =  current_system_prompt['SystemPrompt']
     
     # Saves the info to the file
-    with open("temp/workaround.json", "w") as TEMP_CONFIG:
-        json.dump({"model": selected_model, "system_prompt": system_prompt_data}, TEMP_CONFIG, indent=4)
+    with open("temp/workaround.json", "w") as SYS_TEMP_CONFIG:
+        SYS_TEMP_CONFIG.write(json.dumps({"model": selected_model, "system_prompt": current_system_prompt_data}, indent=4))
 
     friendly_name = CONFIG["ModelNames"][selected_model]
     logging.info(f"Switched to {friendly_name}")
@@ -113,6 +113,7 @@ async def which(ctx: commands.Context):
 client.add_command(prompt(TOOLS))
 client.add_command(sync)
 client.add_command(thought)
+client.add_command(secret)
 
 # Run the bot
 client.run(CONFIG['DiscordToken'])

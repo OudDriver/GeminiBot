@@ -7,14 +7,15 @@ import logging
 
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
-from typing import Any, Dict 
+from typing import Any, Dict, List
 
 with open('config.json') as f:
     config = json.loads(f.read())
 
 genai.configure(api_key=config['GeminiAPI'])
 
-def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = True, regular_search_queries: bool = True, get_website_content: bool = False) -> list[dict]:
+def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = True, regular_search_queries: bool = True, get_website_content: bool = False) -> \
+list[dict[str, str]] | str:
     """Searches DuckDuckGo for a given query and returns a list of results.
 
     Args:
@@ -40,7 +41,7 @@ def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = 
             - href: The URL of the search result.
             - body: The content of the website (if `get_website_content` is True), otherwise None.
     """
-    maxres = int(max_results)
+    max_result = int(max_results)
     query = query.strip("\"'")
     with DDGS() as ddgs:
         if instant_answers:
@@ -60,7 +61,7 @@ def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = 
             return [answer_dict]
         elif regular_search_queries:
             results = []
-            for result in ddgs.text(query, region='wt-wt', safesearch='moderate', timelimit=None, max_results=maxres):
+            for result in ddgs.text(query, region='wt-wt', safesearch='moderate', timelimit=None, max_results=max_result):
                 if get_website_content:
                     result["body"] = get_webpage_content_ddg(result["href"])
                 results.append(result)
@@ -74,10 +75,7 @@ def get_webpage_content_ddg(url: str) -> str:
                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
                "Accept-Language": "en-US,en;q=0.5"}
     if not url.startswith("https://"):
-        try:
-            response = requests.get(f"https://{url}", headers=headers)
-        except:
-            response = requests.get(url, headers=headers)
+        response = requests.get(f"https://{url}", headers=headers)
     else:
         response = requests.get(url, headers=headers)
 
@@ -110,7 +108,6 @@ def make_get_request(url: str, *kwargs: Any) -> str:
             return response.text
     except httpx.HTTPError as exc:
         logging.exception(f"HTTP error occurred: {exc}")
-        return
 
 def get_wikipedia_page(query: str) -> str:
     """
@@ -125,7 +122,7 @@ def get_wikipedia_page(query: str) -> str:
     try:
         # Use Wikipedia API to get the page content
         page = wikipedia.page(query)
-        logging.info(f"Retrieval about {page.title} succesful.")
+        logging.info(f"Retrieval about {page.title} successful.")
         return page.content
     except wikipedia.exceptions.PageError:
         return f"Sorry, I couldn't find a Wikipedia page for '{query}'."

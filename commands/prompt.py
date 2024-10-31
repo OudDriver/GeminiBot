@@ -1,10 +1,4 @@
-from anyio import fail_after
-import google.generativeai as genai
-import logging
-import re
-import traceback
 import ssl
-import asyncio
 import json
 import datetime
 
@@ -23,7 +17,7 @@ HARM_BLOCK_THRESHOLD = {
 
 CONFIG = json.load(open("config.json"))
 
-YOUTUBE_PATTERN = re.compile(r"https://(www\.youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)(?:\S*(?:&|\?)list=[^&]+)?(?:&index=\d+)?")
+YOUTUBE_PATTERN = re.compile(r"https://(www\.youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)(?:\S*[&?]list=[^&]+)?(?:&index=\d+)?")
 MAX_MESSAGE_LENGTH = 2000
 SAFETY_SETTING = HARM_BLOCK_THRESHOLD[CONFIG["HarmBlockThreshold"]]
 SAFETY = {
@@ -34,12 +28,15 @@ SAFETY = {
 }
 
 thought = ""
+secrets = ""
+output = ""
+ctxGlob = None
 memory = None
 
 def prompt(tools: list):
     @commands.hybrid_command(name="prompt")
     async def command(ctx: commands.Context, *, message: str):
-        global ctxGlob, thought, output, memory
+        global ctxGlob, thought, output, memory, secrets
         """
         Generates text based on a given message and optional image, video, audio attachments. Also supports YouTube link.
         """
@@ -72,44 +69,44 @@ def prompt(tools: list):
                 logging.info(f"Received Input With Prompt: {message}")
                 
                 # Preprocessing and handling attachments/links
-                finalPrompt = [YOUTUBE_PATTERN.sub("", message)]
-                fileNames = []
-                uploadedFiles = []
+                final_prompt = [YOUTUBE_PATTERN.sub("", message)]
+                file_names = []
+                uploaded_files = []
 
                 link = YOUTUBE_PATTERN.search(message)
 
                 # Download the files and upload them
                 if link:
                     logging.info(f"Found Link {link}")
-                    fileNamesFromFunc, uploadedFilesFromFunc = await handleYoutube(link)
+                    file_names_from_func, uploaded_files_from_func = await handle_youtube(link)
                     
-                    fileNames.extend(fileNamesFromFunc)
-                    uploadedFiles.extend(uploadedFilesFromFunc)
+                    file_names.extend(file_names_from_func)
+                    uploaded_files.extend(uploaded_files_from_func)
                     
-                tasks = [handleAttachment(attachment) for attachment in ctx.message.attachments]
+                tasks = [handle_attachment(attachment) for attachment in ctx.message.attachments]
                 results = await asyncio.gather(*tasks)
                 
                 for result in results:
-                    fileNames.extend(result[0])
-                    uploadedFiles.extend(result[1])
+                    file_names.extend(result[0])
+                    uploaded_files.extend(result[1])
 
                 # Waits until the file is active
-                if uploadedFiles:
-                    for uploadedFile in uploadedFiles:
-                        await waitForFileActive(uploadedFile)
+                if uploaded_files:
+                    for uploadedFile in uploaded_files:
+                        await wait_for_file_active(uploadedFile)
                         logging.info(f"{genai.get_file(uploadedFile.name).display_name} is active at server")
-                        finalPrompt.append(uploadedFile)
+                        final_prompt.append(uploadedFile)
 
                 # Added context, such as the reply and the  user
                 if ctx.message.reference:
-                    reply = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-                    finalPrompt.insert(0, f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id} Replied To \"{reply.content}\": ")
+                    replied = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+                    final_prompt.insert(0, f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id} Replied To \"{replied.content}\": ")
                 else:
-                    finalPrompt.insert(0, f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id}: ")
+                    final_prompt.insert(0, f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id}: ")
                     
-                logging.info(f"Got Final Prompt {finalPrompt}")
+                logging.info(f"Got Final Prompt {final_prompt}")
                 
-                response = await chat.send_message_async(finalPrompt, safety_settings=SAFETY)
+                response = await chat.send_message_async(final_prompt, safety_settings=SAFETY)
                 
                 func_call_result = {}
                 function_call = False
@@ -138,8 +135,9 @@ def prompt(tools: list):
                             result = func(**args)
                             func_call_result[fn.name] = result
                             
-                    if function_call == True:
+                    if function_call:
                         # Adds the function calling output
+                        # noinspection PyTypeChecker
                         response_parts = [
                             genai.protos.Part(function_response=genai.protos.FunctionResponse(name=fn, response={"result": val})) for fn, val in func_call_result.items()
                         ]
@@ -148,41 +146,41 @@ def prompt(tools: list):
                         
                     else:
                         break
-                
-                
+                    
                     
                 text = response.text
                 logging.info(f"Got Response.\n{text}")
                 
                 memory = chat.history 
                 
-                text, matches = clean_text(text)
+                text, thought_matches, secret_matches = clean_text(text)
                 thought = ""
-                if matches:
-                    for match in matches:
-                        thought += f"{match}\n"
+                secrets = ""
+                if thought_matches:
+                    for thought_match in thought_matches:
+                        thought += f"{thought_match}\n"
                     text += "(This reply have a thought)"
+                if secret_matches:
+                    for secret_match in secret_matches:
+                        secrets += f"{secret_match}\n"
                 
-                await sendLongMessage(ctx, text, MAX_MESSAGE_LENGTH)
+                await send_long_message(ctx, text, MAX_MESSAGE_LENGTH)
         
         except ssl.SSLEOFError as e:
-            errorMessage = f"`{e}`\nPerhaps, you can try your request again!"
-            logging.exception(f"Error: {errorMessage}")
-            await sendLongMessage(ctx, errorMessage, MAX_MESSAGE_LENGTH)
+            error_message = f"`{e}`\nPerhaps, you can try your request again!"
+            logging.exception(f"Error: {error_message}")
+            await send_long_message(ctx, error_message, MAX_MESSAGE_LENGTH)
         
         except genai.types.StopCandidateException as e:
-            await sendLongMessage(ctx, f"{e}\nThat means your prompt isn't safe! Try again!", MAX_MESSAGE_LENGTH)
+            await send_long_message(ctx, f"{e}\nThat means your prompt isn't safe! Try again!", MAX_MESSAGE_LENGTH)
             
         except Exception as e:
-            await sendLongMessage(ctx, f"`{e}`", MAX_MESSAGE_LENGTH)
+            await send_long_message(ctx, f"`{e}`", MAX_MESSAGE_LENGTH)
             logging.exception(f"\n{e}")
 
         finally:
-            try:
-                for file in fileNames:
-                    os.remove(file)
-                    logging.info(f"Deleted {os.path.basename(file)} at local server")
-            except Exception as e:
-                pass
+            for file in file_names:
+                os.remove(file)
+                logging.info(f"Deleted {os.path.basename(file)} at local server")
 
     return command

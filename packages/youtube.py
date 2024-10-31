@@ -5,17 +5,17 @@ import logging
 import os
 import time
 
-from packages.utils import generateUniqueFileName
+from packages.utils import generate_unique_file_name
 
-def downloadVideoAudio(link: str) -> tuple:
+def download_video(link: str):
     """
     Downloads separate video and audio streams from a YouTube link and returns their paths.
     """
-    video = YouTube(link).streams.first().download(output_path='./temp', filename=generateUniqueFileName('mp4')) 
+    video = YouTube(link).streams.first().download(output_path='./temp', filename=generate_unique_file_name('mp4'))
 
     return video
 
-def searchRegex(pattern: str, text: str):
+def search_regex(pattern: str, text: str):
     """
     Searches for a regex pattern in a text and returns the match if found.
     """
@@ -25,14 +25,14 @@ def searchRegex(pattern: str, text: str):
         return link
     return None
 
-def checkFileActive(uploadedFile):
+def check_for_file_active(uploaded_file):
     """
     Checks if the uploaded file is active on Google servers.
     """
-    status = genai.get_file(uploadedFile.name).state
+    status = genai.get_file(uploaded_file.name).state
     return status == 2
 
-async def waitForFileActive(uploadedFile):
+async def wait_for_file_active(uploaded_file_to_check):
     """
     Waits until the uploaded file becomes active on Google servers.
     """
@@ -40,9 +40,9 @@ async def waitForFileActive(uploadedFile):
     timeout = 30
 
     try:
-        while not checkFileActive(uploadedFile):
+        while not check_for_file_active(uploaded_file_to_check):
             if time.monotonic() - start_time >= timeout:
-                logging.warning(f"Timeout while waiting for file {uploadedFile.name} to become active. Skipping Check")
+                logging.warning(f"Timeout while waiting for file {uploaded_file_to_check.name} to become active. Skipping Check")
                 return 
 
             await asyncio.sleep(1)  
@@ -50,45 +50,45 @@ async def waitForFileActive(uploadedFile):
     except Exception as e:
         logging.error(f"Error while waiting for file active! {e}.")
         
-async def handleYoutube(link):
+async def handle_youtube(link):
     try:
-        videoFile = await asyncio.to_thread(downloadVideoAudio, link.group(0))
+        video_file = await asyncio.to_thread(download_video, link.group(0))
         
-        logging.info(f"Downloaded The Video {os.path.basename(videoFile)}")
+        logging.info(f"Downloaded The Video {os.path.basename(video_file)}")
         
-        fileNames = []
-        uploadedFiles = []
+        file_names = []
+        uploaded_files = []
         
-        fileNames.extend([videoFile])
-        uploadedYoutubeFile = await asyncio.to_thread(genai.upload_file, videoFile)
-        uploadedFiles.append(uploadedYoutubeFile)
+        file_names.extend([video_file])
+        uploaded_youtube_file = await asyncio.to_thread(genai.upload_file, video_file)
+        uploaded_files.append(uploaded_youtube_file)
         
-        logging.info(f"Uploaded {uploadedYoutubeFile.display_name} as {uploadedYoutubeFile.name}")
+        logging.info(f"Uploaded {uploaded_youtube_file.display_name} as {uploaded_youtube_file.name}")
         
-        return fileNames, uploadedFiles
+        return file_names, uploaded_files
     except Exception as e:
         logging.exception(f"Error in handleYoutube: {e}")
         return [], [] # Return empty lists to indicate failure
 
-async def handleAttachment(attachment):
+async def handle_attachment(attachment):
     try:
         file_extension = attachment.filename.split(".")[-1]
-        unique_file_name = generateUniqueFileName(file_extension)
-        fileName = f"./temp/{unique_file_name}"
+        unique_file_name = generate_unique_file_name(file_extension)
+        file_name = f"./temp/{unique_file_name}"
         
-        await attachment.save(fileName)
-        logging.info(f"Saved {attachment.content_type.split('/')[0]} {fileName}")
+        await attachment.save(file_name)
+        logging.info(f"Saved {attachment.content_type.split('/')[0]} {file_name}")
         
-        fileNames = []
-        uploadedFiles = []
+        file_names = []
+        uploaded_files = []
         
-        fileNames.append(fileName)
-        uploadedFile = await asyncio.to_thread(genai.upload_file, fileName)
-        uploadedFiles.append(uploadedFile)
+        file_names.append(file_name)
+        uploaded_file = await asyncio.to_thread(genai.upload_file, file_name)
+        uploaded_files.append(uploaded_file)
         
-        logging.info(f"Uploaded {uploadedFile.display_name} as {uploadedFile.name}")
+        logging.info(f"Uploaded {uploaded_file.display_name} as {uploaded_file.name}")
         
-        return fileNames, uploadedFiles
+        return file_names, uploaded_files
     except Exception as e:
         logging.exception(f"Error in handleAttachment: {e}")
         return [], [] # Return empty lists to indicate failure

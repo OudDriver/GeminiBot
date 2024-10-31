@@ -20,22 +20,22 @@ class WolframAlphaAPI:
     
     def __init__(self, app_id: str):
         self.app_id: str = app_id
-        self.url: str = "http://api.wolframalpha.com/v2/"
+        self.url: str = "https://api.wolframalpha.com/v2/"
     
-    async def _make_request(self, endpoint: str, input: str, **kwargs: Any) -> httpx.Response:
+    async def _make_request(self, endpoint: str, input_query: str, **kwargs: Any) -> httpx.Response:
         """
         Makes a request to the Wolfram Alpha API.
 
         Args:
             endpoint: The API endpoint to call (e.g., "query").
-            input: The input string for the query.
+            input_query: The input string for the query.
             kwargs: Additional parameters to send with the request.
 
         Returns:
             The HTTP response from the API.
         """
         async with httpx.AsyncClient() as client:
-            params: Dict[str, str] = {"appid": self.app_id, "input": input}
+            params: Dict[str, str] = {"appid": self.app_id, "input": input_query}
             params.update(kwargs) 
             
             logging.info(params)
@@ -44,7 +44,8 @@ class WolframAlphaAPI:
             
             return response
         
-    async def _parse_xml(self, xml_string: str) -> Dict[str, Any]:
+    @staticmethod
+    async def _parse_xml(xml_string: str) -> Dict[str, Any]:
         """
         Parses the XML response from Wolfram Alpha.
 
@@ -58,7 +59,7 @@ class WolframAlphaAPI:
     
     async def _find_steps_input(self, input_string):
         temp_response = await self._make_request("query", input_string)
-        temp_doc = await self._parse_xml(temp_response.content)
+        temp_doc = await self._parse_xml(temp_response.text)
         temp_doc = temp_doc['queryresult']
         
         states = []
@@ -77,7 +78,8 @@ class WolframAlphaAPI:
             
         return None 
 
-    def _process_subpod(self, subpods: List[Dict[str, Any]], pod_title: str) -> Dict[str, str]:
+    @staticmethod
+    def _process_subpod(subpods: List[Dict[str, Any]], pod_title: str) -> Dict[str, str]:
         """
         Helper function to process subpods and populate output.
 
@@ -93,6 +95,7 @@ class WolframAlphaAPI:
             if re.search("steps", subpod['@title']):
                 output[subpod['@title']] = subpod.get('plaintext', 'No plain text available') 
             else:
+                # noinspection PyTypeChecker
                 output.setdefault(pod_title, []).append(subpod['plaintext'])
         
         return output
@@ -146,17 +149,17 @@ class WolframAlphaFullAPI(WolframAlphaAPI):
             configs.update(show_steps_input)
         
         response = await self._make_request("query", input_string, **configs, **kwargs)
-        doc = await self._parse_xml(response.content)
+        doc = await self._parse_xml(response.text)
         
         return doc['queryresult']
 
 
-def WolframAlpha(query: str, show_steps: bool = False, raw: bool = False):
+def wolfram_alpha(query: str, show_steps: bool = False, raw: bool = False):
     """
     Sends a query to the Wolfram Alpha Full API. WolframAlpha can answer the simplest math questions to hard math questions.
     
     Args:
-        input_string: The input string for the query.
+        query: The input string for the query.
         show_steps: Whether to show the steps or not.
         raw: Whether to return the raw output. Use this when the cleaned output doesn't work.
         
@@ -170,4 +173,7 @@ def WolframAlpha(query: str, show_steps: bool = False, raw: bool = False):
     
     logging.info(output)
     
-    return output if raw else client._clean_up(output)
+    if raw:
+        return output
+    else:
+        client._clean_up(output)

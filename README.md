@@ -105,7 +105,7 @@ sudo pacman -S ffmpeg
 
 # API Keys
 ## Gemini API
-Make sure you enabled the [Generative Language API](https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com), or it will not work. Head over to [Google AI Studio](https://aistudio.google.com/app/prompts/new_chat) and click on that shiny blue button labeled "Get API key" at the top left of the screen. Then, click the boring "Create API Key" in the middle of your screen. Click the blue "Create API key in new project" or select an existing project (usually named "My First Project." I know you).
+Make sure you enable the [Generative Language API](https://console.cloud.google.com/apis/api/generativelanguage.googleapis.com), or it will not work. Head over to [Google AI Studio](https://aistudio.google.com/app/prompts/new_chat) and click on that shiny blue button labeled "Get API key" at the top left of the screen. Then, click the boring "Create API Key" in the middle of your screen. Click the blue "Create API key in new project" or select an existing project (usually named "My First Project." I know you).
 
 ## Wolfram|Alpha API
 Go to [the Wolfram|Alpha Api](https://products.wolframalpha.com/api/) and click on the boring orange button named "[Get API Access](https://developer.wolframalpha.com/)" Make a new Wolfram account and click on thet bright orange button labeled "Get an App ID." Give it a boring name like "MyAppID" and a Description because it is required. Then, select any API type. I recommend the "Full Results API." 

@@ -94,7 +94,7 @@ def send(message: str):
         await ctxGlob.send(msg)
         
     loop = asyncio.get_running_loop() 
-    return loop.run_until_complete(_send(message))
+    loop.run_until_complete(_send(message))
     
 def reply(message: str):
     async def _reply(msg):
@@ -102,18 +102,15 @@ def reply(message: str):
         await ctxGlob.reply(msg)
     
     loop = asyncio.get_running_loop() 
-    return loop.run_until_complete(_reply(message))
+    loop.run_until_complete(_reply(message))
     
 def hi():
     """
     A test function that says hi.
     """
-    async def _hi():
-        await send("SassBot Said Hi!")
-        return "Sassbot Said Hi"
-       
-    loop = asyncio.get_running_loop() 
-    return loop.run_until_complete(_hi())
+    send("SassBot Said Hi!")
+    logging.info("SassBot Said Hi!")
+    return "SassBot Said Hi!"
     
 def execute_code(code_string: str):
     """Executes Python code from a string and captures the output.

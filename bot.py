@@ -9,7 +9,7 @@ from commands.sync import sync
 from commands.thought import thought, secret
 
 from packages.internet import search_duckduckgo, make_get_request, get_wikipedia_page
-from packages.weathermap import get_weather
+from packages.weather import get_weather
 from packages.wolfram import wolfram_alpha
 from packages.utils import timeout, hi, execute_code
 
@@ -18,7 +18,11 @@ CONFIG = json.load(open("config.json"))
 
 # System Prompt and Tools for the bot
 SYSTEM_PROMPTS = CONFIG["SystemPrompts"]
-TOOLS = [search_duckduckgo, get_weather, wolfram_alpha, make_get_request, get_wikipedia_page, timeout, hi, execute_code]
+TOOLS = {
+    "Web Search & Wolfram": [search_duckduckgo, get_weather, wolfram_alpha, make_get_request, get_wikipedia_page, execute_code, timeout, hi],
+    "Google Search": 'google_search_retrieval',
+    "Code Execution": 'code_execution'
+}
 
 genai.configure(api_key=CONFIG['GeminiAPI'])
 
@@ -29,6 +33,11 @@ system_prompt_data =  system_prompt['SystemPrompt']
 
 # Model Options and Index
 model_options = [key for key in CONFIG["ModelNames"]]
+
+# Active tools (start with default tools)
+active_tools_index = 0
+tool_names = list(TOOLS.keys())  # Get a list of toolset names
+active_tools = TOOLS[tool_names[active_tools_index]] # Use tool name as key
 
 # Saving temporary configurations to temp/workaround.json to transfer to prompt.py
 current_model_index = 0
@@ -101,6 +110,20 @@ async def toggle(ctx: commands.Context):
 
     await client.change_presence(activity=discord.CustomActivity(name=f'Hello there! I am using {friendly_name}'))
 
+@client.command(name="toggle_tools")
+async def toggle_tools(ctx: commands.Context):
+    global active_tools_index, active_tools
+
+    tool_names = list(TOOLS.keys())
+    active_tools_index = (active_tools_index + 1) % len(tool_names)
+    active_tool_name = tool_names[active_tools_index]  # Correct: Get name using index
+    active_tools = TOOLS[active_tool_name]  # Access tools by name
+
+    await ctx.send(f"Switched to toolset: {active_tool_name}")
+
+    # Important: Update the prompt command to use the new active tools
+    client.remove_command('prompt')
+    client.add_command(prompt(active_tools))
 
 # Shows the models you are using
 @client.command(name="which")
@@ -110,7 +133,7 @@ async def which(ctx: commands.Context):
 
 
 # Add commands
-client.add_command(prompt(TOOLS))
+client.add_command(prompt(active_tools))
 client.add_command(sync)
 client.add_command(thought)
 client.add_command(secret)

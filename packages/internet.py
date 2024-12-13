@@ -7,12 +7,12 @@ import logging
 
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 with open('config.json') as f:
     config = json.loads(f.read())
 
-genai.configure(api_key=config['GeminiAPI'])
+genai.configure(api_key=config['GeminiAPIkey'])
 
 def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = True, regular_search_queries: bool = True, get_website_content: bool = False) -> \
 list[dict[str, str]] | str:
@@ -107,7 +107,7 @@ def make_get_request(url: str, *kwargs: Any) -> str:
             response.raise_for_status()
             return response.text
     except httpx.HTTPError as exc:
-        logging.exception(f"HTTP error occurred: {exc}")
+        logging.error(f"HTTP error occurred: {exc}")
 
 def get_wikipedia_page(query: str) -> str:
     """
@@ -129,5 +129,5 @@ def get_wikipedia_page(query: str) -> str:
     except wikipedia.exceptions.DisambiguationError as e:
         return f"Your query is ambiguous. Please be more specific. Did you mean any of these?\n{e.options}"
     except Exception as e:
-        logging.exception(f"An error occurred while fetching Wikipedia data: {e}")
+        logging.error(f"An error occurred while fetching Wikipedia data: {e}")
         return "Sorry, I encountered an error while fetching information from Wikipedia."

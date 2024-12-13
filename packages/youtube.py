@@ -67,7 +67,7 @@ async def handle_youtube(link):
         
         return file_names, uploaded_files
     except Exception as e:
-        logging.exception(f"Error in handleYoutube: {e}")
+        logging.error(f"Error in handleYoutube: {e}")
         return [], [] # Return empty lists to indicate failure
 
 async def handle_attachment(attachment):
@@ -90,5 +90,5 @@ async def handle_attachment(attachment):
         
         return file_names, uploaded_files
     except Exception as e:
-        logging.exception(f"Error in handleAttachment: {e}")
+        logging.error(f"Error in handleAttachment: {e}")
         return [], [] # Return empty lists to indicate failure

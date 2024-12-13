@@ -9,8 +9,10 @@ import sys
 import io
 import re
 import nest_asyncio
+import google.ai.generativelanguage_v1beta.types.generative_service
 
 from packages.maps import subscript_map, superscript_map
+
 
 nest_asyncio.apply()
 
@@ -50,12 +52,30 @@ def clean_text(text: str):
     return text, thought_matches, secret_matches
 
 async def send_long_message(ctx, message, length):
-    """Sends a long message in chunks."""
-    for i in range(0, len(message), length):
-        await ctx.reply(message[i:i + length])
+    """Sends a long message in chunks, splitting at the nearest space within the length limit."""
+    start = 0
+    while start < len(message):
+        end = min(start + length, len(message))  # Initial end position
+
+        # Find the last space within the length limit
+        if end < len(message):
+            last_space = message.rfind(' ', start, end)
+            if last_space != -1:
+                end = last_space  # Split at the last space
+
+        await ctx.reply(message[start:end])
+        start = end + 1  # Move start to the next character after the split
+
+async def send_long_messages(ctx, messages, length):
+    """Sends a long list of message in chunks, splitting at the nearest space within the length limit."""
+    for message in messages:
+        if isinstance(message, str):
+            await send_long_message(ctx, message, length)
+        elif isinstance(message, discord.File):
+            await ctx.reply(file=message)
         
-def timeout(member_id: int, duration: int= 60, reason: str = None):
-    """Timeouts a Discord member using their ID for a specified duration. (It actually works)
+def timeout(member_id: int, duration: int = 60, reason: str = None):
+    """Timeouts a Discord member using their ID for a specified duration. Do not use scientific notation. (It actually works)
 
         Args:
             member_id: The user's ID.
@@ -153,4 +173,30 @@ def execute_code(code_string: str):
     final = f"Code:\n```py\n{encoded_string}\n```\nOutput:\n```\n{captured_stdout.getvalue()}\n```"
     reply(final)
     return captured_stdout.getvalue()
+
+def create_grounding_markdown(candidates: google.ai.generativelanguage_v1beta.types.generative_service.Candidate):
+    """
+    Parses JSON data and creates a markdown string of grounding sources.
+
+    Args:
+        candidates (dict): The JSON data to parse.
+
+    Returns:
+        str: A markdown string of grounding sources, or None if no grounding data is found.
+    """
+
+    try:
+        grounding_chunks = candidates[0].grounding_metadata.grounding_chunks
+    except AttributeError as e:
+        return e
+
+    if not grounding_chunks:
+        return
+
+    markdown_string = "## Grounding Sources:\n\n"
+
+    for chunk in grounding_chunks:
+        markdown_string += f"- [{chunk.web.title}]({chunk.web.uri})\n"
+
+    return markdown_string
 

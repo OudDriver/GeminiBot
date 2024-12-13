@@ -156,7 +156,7 @@ class WolframAlphaFullAPI(WolframAlphaAPI):
 
 def wolfram_alpha(query: str, show_steps: bool = False, raw: bool = False):
     """
-    Sends a query to the Wolfram Alpha Full API. WolframAlpha can answer the simplest math questions to hard math questions.
+    Sends a query to the Wolfram Alpha API. WolframAlpha can answer the simplest math questions to hard math questions.
     
     Args:
         query: The input string for the query.
@@ -176,4 +176,5 @@ def wolfram_alpha(query: str, show_steps: bool = False, raw: bool = False):
     if raw:
         return output
     else:
-        client._clean_up(output)
+        logging.info(client._clean_up(output))
+        return client._clean_up(output)

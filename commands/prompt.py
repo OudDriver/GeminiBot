@@ -1,12 +1,12 @@
 import ssl
 import json
 import datetime
-
 from discord.ext import commands
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 from packages.utils import *
 from packages.youtube import *
+from packages.tex import *
 
 HARM_BLOCK_THRESHOLD = {
     "BLOCK_LOW_AND_ABOVE": HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
@@ -18,7 +18,7 @@ HARM_BLOCK_THRESHOLD = {
 CONFIG = json.load(open("config.json"))
 
 YOUTUBE_PATTERN = re.compile(
-    r"https://(www\.youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)(?:\S*[&?]list=[^&]+)?(?:&index=\d+)?")
+    r'https://(www\.youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)(?:\S*[&?]list=[^&]+)?(?:&index=\d+)?')
 MAX_MESSAGE_LENGTH = 2000
 SAFETY_SETTING = HARM_BLOCK_THRESHOLD[CONFIG["HarmBlockThreshold"]]
 SAFETY = {
@@ -38,30 +38,37 @@ memory = None
 def prompt(tools: list):
     @commands.hybrid_command(name="prompt")
     async def command(ctx: commands.Context, *, message: str):
+        """
+        Generates a response. Supports file inputs and YouTube links.
+
+        Args:
+            ctx: The context of the command invocation
+            message: The message to send the bot
+        """
         global ctxGlob, thought, output, memory, secrets
-        """
-        Generates text based on a given message and optional image, video, audio attachments. Also supports YouTube link.
-        """
         try:
             # Load configuration from temporary JSON file
-            with open("temp/workaround.json", "r") as TEMP_CONFIG:
+            with open("temp/temp_config.json", "r") as TEMP_CONFIG:
                 configs = json.load(TEMP_CONFIG)
 
             # Initialize the GenAI model with configuration and safety settings
             model = genai.GenerativeModel(configs['model'], SAFETY_SETTING, system_instruction=configs['system_prompt'],
                                           tools=tools)
 
-
-
             # Start a new chat or resume from existing memory
             chat = model.start_chat(history=memory) if memory else model.start_chat()
             ctxGlob = ctx
+
             async with ctx.typing():
                 # Clear context if message is {clear}
                 if message.lower() == "{clear}":
-                    memory = []
-                    await ctx.reply("Alright, I have cleared my context. What are we gonna talk about?")
-                    return
+                    if ctx.author.guild_permissions.administrator:
+                        memory = []
+                        await ctx.reply("Alright, I have cleared my context. What are we gonna talk about?")
+                        logging.info("Cleared Context")
+                        return
+                    else:
+                        await ctx.reply("You don't have the necessary permissions for this!", ephemeral=True)
 
                 # Check for bad words and handle accordingly
                 for word in CONFIG["BadWords"]:
@@ -122,6 +129,7 @@ def prompt(tools: list):
                 func_call_result = {}
                 function_call = False
 
+
                 # Loops until there is no more function calling left.
                 while True:
                     if isinstance(tools, str):
@@ -179,13 +187,24 @@ def prompt(tools: list):
                     for secret_match in secret_matches:
                         secrets += f"{secret_match}\n"
                 if tools == "google_search_retrieval":
-                    text = "## Multi-modality not supported while using the Google Search Retrieval tool.\n" + text
+                    text = "### Multi-modality not supported while using the Google Search Retrieval tool.\n" + text + f"\n{create_grounding_markdown(response.candidates)}"
 
-                await send_long_message(ctx, text, MAX_MESSAGE_LENGTH)
+                response_if_tex = split_tex(text)
+
+                if len(response_if_tex) > 1:
+                    for i, tex in enumerate(response_if_tex):
+                        if check_tex(tex):
+                            logging.info(tex)
+                            file = render_latex(tex)
+                            file_names.append(file)
+                            response_if_tex[i] = discord.File(file)
+                    await send_long_messages(ctx, response_if_tex, MAX_MESSAGE_LENGTH)
+                else:
+                    await send_long_message(ctx, text, MAX_MESSAGE_LENGTH)
 
         except ssl.SSLEOFError as e:
             error_message = f"`{e}`\nPerhaps, you can try your request again!"
-            logging.exception(f"Error: {error_message}")
+            logging.error(f"Error: {error_message}")
             await send_long_message(ctx, error_message, MAX_MESSAGE_LENGTH)
 
         except genai.types.StopCandidateException as e:
@@ -193,7 +212,7 @@ def prompt(tools: list):
 
         except Exception as e:
             await send_long_message(ctx, f"`{e}`", MAX_MESSAGE_LENGTH)
-            logging.exception(f"\n{e}")
+            logging.error(f"\n{e}")
 
         finally:
             try:

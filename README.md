@@ -15,6 +15,7 @@
 - [API Keys](#api-keys)
     - [Gemini API](#gemini-api)
     - [Wolfram|Alpha API](#wolframalpha-api)
+- [FAQ](#faq)
 
 ## About
 
@@ -22,9 +23,9 @@ This project is your implementation of the Gemini LLM in discord. Think of it as
 
 **Here's what makes GeminiBot special:**
 
-* **Multi-modality:**  Give it audio, video, or even YouTube links! Gemini can process it all (check out the supported file formats here: [https://ai.google.dev/gemini-api/docs/prompting_with_media?lang=python#supported_file_formats](https://ai.google.dev/gemini-api/docs/prompting_with_media?lang=python#supported_file_formats)). 
+* **Multi-modality:**  Give it audio, video, or even YouTube links! Gemini can process it all (check out the supported file formats [here](https://ai.google.dev/gemini-api/docs/prompting_with_media?lang=python#supported_file_formats)). 
 * **YouTube Magic:** Want Gemini to analyze a YouTube video? No problem! I use some big brain tricks with `pytubefix` and `ffmpeg` to make things work. Turns out, I can't use `pytube` because that failed miserably.
-* **Wolfram Alpha Integration:** Tired of LLM messing up your math problems? This bot can use the power of Wolfram Alpha for accurate and reliable calculations. It can even give you the steps (If you are lucky).
+* **Wolfram Alpha Integration:** Tired of LLM messing up your math problems? This bot can use the power of Wolfram Alpha for accurate and reliable calculations. It can even give you the steps (If you are lucky and the bot doesn't break down. In the event of the bot screwing up WolframAlpha, feel free to submit a bug report, it's not like I'm gonna kill you if you submit useless bug reports.).
 
 ## Getting Started
 
@@ -109,3 +110,7 @@ Make sure you enable the [Generative Language API](https://console.cloud.google.
 
 ## Wolfram|Alpha API
 Go to [the Wolfram|Alpha Api](https://products.wolframalpha.com/api/) and click on the boring orange button named "[Get API Access](https://developer.wolframalpha.com/)" Make a new Wolfram account and click on thet bright orange button labeled "Get an App ID." Give it a boring name like "MyAppID" and a Description because it is required. Then, select any API type. I recommend the "Full Results API." 
+
+# FAQ
+* Damn, why is this app giving me weird errors?
+  * Well, it seems like you haven't updated the dependencies yet. Run `pip install --upgrade -r requirements.txt`. 

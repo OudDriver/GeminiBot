@@ -1,6 +1,6 @@
 from discord.ext import commands
 from discord import app_commands
-import google.generativeai as genai
+import google.genai as genai
 import discord
 import json
 import logging
@@ -20,14 +20,13 @@ CONFIG = json.load(open("config.json"))
 # Define system prompts and available tools for the bot
 SYSTEM_PROMPTS = CONFIG["SystemPrompts"]
 TOOLS = {
-    "Web Search & Wolfram": [search_duckduckgo, get_weather, wolfram_alpha, make_get_request, get_wikipedia_page,
-                             execute_code, timeout, hi],
-    "Google Search": 'google_search_retrieval',
+    "Default": [make_get_request],
+    "Google Search": 'google_search',
     "Code Execution": 'code_execution'
 }
 
 # Configure Google Gemini API key
-genai.configure(api_key=CONFIG['GeminiAPIkey'])
+genai_client = genai.Client(api_key=CONFIG['GeminiAPIkey'])
 
 # Initialize system prompt
 current_sys_prompt_index = 0
@@ -42,11 +41,14 @@ active_tools_index = 0
 tool_names = list(TOOLS.keys())
 active_tools = TOOLS[tool_names[active_tools_index]]
 
+# Set current uwu status for tracking
+current_uwu_status = False
+
 # Set initial model and save temporary configuration
 current_model_index = 0
 model = model_options[current_model_index]
 with open("temp/temp_config.json", "w") as TEMP_CONFIG:
-    TEMP_CONFIG.write(json.dumps({"model": model, "system_prompt": system_prompt_data}, indent=4))
+    json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status}, TEMP_CONFIG)
 
 # Set up Discord bot with intents
 intents = discord.Intents.default()
@@ -68,6 +70,40 @@ async def on_ready():
     logging.info(f'Logged in as {client.user}. Using {model_options[current_model_index]}')
     friendly_name = CONFIG["ModelNames"][model_options[current_model_index]]
     await client.change_presence(activity=discord.CustomActivity(name=f'Hello there! I am using {friendly_name}'))
+
+@client.hybrid_command(name="uwuify")
+@commands.has_permissions(manage_messages=True)
+async def uwuify(ctx: commands.Context):
+    """
+    Why!?!?
+
+    Args:
+        ctx: The context of the command invocation
+    """
+    global current_uwu_status
+    with open("temp/temp_config.json", "r") as TEMP_CFG:
+        data = json.load(TEMP_CFG)
+
+    # Get current model
+    selected_model = model_options[current_model_index]
+
+    # Get current system prompt
+    current_system_prompt = SYSTEM_PROMPTS[current_sys_prompt_index]
+    current_system_prompt_data = current_system_prompt['SystemPrompt']
+
+    if not data["uwu"]:
+        current_uwu_status = True
+        with open("temp/temp_config.json", "w") as TEMP_CFG:
+            json.dump({"model": selected_model, "system_prompt": current_system_prompt_data, "uwu": current_uwu_status}, TEMP_CFG)
+        await ctx.reply("Enabled Uwuifier. Beware that asking it for code will not work.")
+        logging.info("Enabled Uwuifier.")
+    else:
+        current_uwu_status = False
+        with open("temp/temp_config.json", "w") as TEMP_CFG:
+            json.dump({"model": selected_model, "system_prompt": current_system_prompt_data, "uwu": current_uwu_status}, TEMP_CFG)
+        await ctx.reply("Disabled Uwuifier.")
+        logging.info("Disabled Uwuifier.")
+
 
 @client.hybrid_command(name="toggle")
 @app_commands.choices(toggles=[
@@ -98,8 +134,7 @@ async def toggle(ctx: commands.Context, toggles: str):
 
         # Save updated configuration to temporary file
         with open("temp/temp_config.json", "w") as SYS_TEMP_CONFIG:
-            SYS_TEMP_CONFIG.write(
-                json.dumps({"model": selected_model, "system_prompt": changed_system_prompt_data}, indent=4))
+            json.dump({"model": selected_model, "system_prompt": changed_system_prompt_data, "uwu": current_uwu_status}, SYS_TEMP_CONFIG)
 
         logging.info(f"Switched to {system_prompt_name}")
 
@@ -115,8 +150,7 @@ async def toggle(ctx: commands.Context, toggles: str):
 
         # Save updated configuration to temporary file
         with open("temp/temp_config.json", "w") as SYS_TEMP_CONFIG:
-            SYS_TEMP_CONFIG.write(
-                json.dumps({"model": selected_model, "system_prompt": current_system_prompt_data}, indent=4))
+            json.dump({"model": selected_model, "system_prompt": current_system_prompt_data, "uwu": current_uwu_status}, SYS_TEMP_CONFIG)
 
         friendly_name = CONFIG["ModelNames"][selected_model]
         logging.info(f"Switched to {friendly_name}")
@@ -137,7 +171,7 @@ async def toggle(ctx: commands.Context, toggles: str):
 
         # Update the prompt command to use the new active tools
         client.remove_command('prompt')
-        client.add_command(prompt(active_tools))
+        client.add_command(prompt(active_tools, genai_client))
 
 
 # Command to show the currently used model
@@ -153,7 +187,7 @@ async def which(ctx: commands.Context):
     await ctx.reply(f"You are using {friendly_name}", ephemeral=True)
 
 # Add available commands to the bot
-client.add_command(prompt(active_tools))
+client.add_command(prompt(active_tools, genai_client))
 client.add_command(sync)
 client.add_command(thought)
 client.add_command(secret)

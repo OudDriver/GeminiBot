@@ -1,32 +1,24 @@
 import ssl
 import json
 import datetime
+import traceback
 from discord.ext import commands
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google.genai.types import GenerateContentConfig, SafetySetting
+from google.genai import Client
 
 from packages.utils import *
 from packages.youtube import *
 from packages.tex import *
+from packages.uwu import Uwuifier
 
-HARM_BLOCK_THRESHOLD = {
-    "BLOCK_LOW_AND_ABOVE": HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
-    "BLOCK_MEDIUM_AND_ABOVE": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-    "BLOCK_ONLY_HIGH": HarmBlockThreshold.BLOCK_ONLY_HIGH,
-    "BLOCK_NONE": HarmBlockThreshold.BLOCK_NONE,
-}
+
 
 CONFIG = json.load(open("config.json"))
 
 YOUTUBE_PATTERN = re.compile(
     r'https://(www\.youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)(?:\S*[&?]list=[^&]+)?(?:&index=\d+)?')
 MAX_MESSAGE_LENGTH = 2000
-SAFETY_SETTING = HARM_BLOCK_THRESHOLD[CONFIG["HarmBlockThreshold"]]
-SAFETY = {
-    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: SAFETY_SETTING,
-    HarmCategory.HARM_CATEGORY_HARASSMENT: SAFETY_SETTING,
-    HarmCategory.HARM_CATEGORY_HATE_SPEECH: SAFETY_SETTING,
-    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: SAFETY_SETTING
-}
+SAFETY_SETTING = CONFIG["HarmBlockThreshold"]
 
 thought = ""
 secrets = ""
@@ -35,7 +27,7 @@ ctxGlob = None
 memory = None
 
 
-def prompt(tools: list):
+def prompt(tools: list, genai_client: Client):
     @commands.hybrid_command(name="prompt")
     async def command(ctx: commands.Context, *, message: str):
         """
@@ -51,12 +43,21 @@ def prompt(tools: list):
             with open("temp/temp_config.json", "r") as TEMP_CONFIG:
                 configs = json.load(TEMP_CONFIG)
 
-            # Initialize the GenAI model with configuration and safety settings
-            model = genai.GenerativeModel(configs['model'], SAFETY_SETTING, system_instruction=configs['system_prompt'],
-                                          tools=tools)
+
+            # Initialize model and configs
+            model = configs['model']
+            safety_settings = [
+                SafetySetting(category="HARM_CATEGORY_CIVIC_INTEGRITY", threshold=SAFETY_SETTING),
+                SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold=SAFETY_SETTING),
+                SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold=SAFETY_SETTING),
+                SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold=SAFETY_SETTING),
+                SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold=SAFETY_SETTING),
+                SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold=SAFETY_SETTING)
+            ]
+            config = GenerateContentConfig(system_instruction=configs['system_prompt'], tools=tools, safety_settings=safety_settings)
 
             # Start a new chat or resume from existing memory
-            chat = model.start_chat(history=memory) if memory else model.start_chat()
+            chat = genai_client.chats.create(history=memory, model=model, config=config) if memory else genai_client.chats.create(model=model, config=config)
             ctxGlob = ctx
 
             async with ctx.typing():
@@ -75,7 +76,7 @@ def prompt(tools: list):
                     if word in ctx.message.content.lower():
                         await ctx.message.delete()
                         await ctx.author.timeout(datetime.timedelta(minutes=10),
-                                                 reason="Saying a word blocked in config.json")
+                                                 reason="Saying a word blocked in the config file")
                         await ctx.send(f"Chill <@{ctx.author.id}>! Don't say things like that.")
                         return
 
@@ -124,7 +125,7 @@ def prompt(tools: list):
 
                 logging.info(f"Got Final Prompt {final_prompt}")
 
-                response = chat.send_message(final_prompt, safety_settings=SAFETY)
+                response = chat.send_message(final_prompt)
 
                 func_call_result = {}
                 function_call = False
@@ -136,7 +137,7 @@ def prompt(tools: list):
                         break
 
                     # Manual function calling system
-                    for part in response.parts:
+                    for part in response.candidates[0].content.parts:
                         if fn := part.function_call:
                             function_call = True
 
@@ -165,7 +166,7 @@ def prompt(tools: list):
                                 function_response=genai.protos.FunctionResponse(name=fn, response={"result": val})) for
                             fn, val in func_call_result.items()
                         ]
-                        response = chat.send_message(response_parts, safety_settings=SAFETY)
+                        response = chat.send_message(response_parts)
                         function_call = False
 
                     else:
@@ -174,7 +175,7 @@ def prompt(tools: list):
                 text = response.text
                 logging.info(f"Got Response.\n{text}")
 
-                memory = chat.history
+                memory = chat._curated_history
 
                 text, thought_matches, secret_matches = clean_text(text)
                 thought = ""
@@ -188,6 +189,10 @@ def prompt(tools: list):
                         secrets += f"{secret_match}\n"
                 if tools == "google_search_retrieval":
                     text = "### Multi-modality not supported while using the Google Search Retrieval tool.\n" + text + f"\n{create_grounding_markdown(response.candidates)}"
+
+                if configs['uwu']:
+                    uwu = Uwuifier()
+                    text = uwu.uwuify_sentence(text)
 
                 response_if_tex = split_tex(text)
 
@@ -212,7 +217,7 @@ def prompt(tools: list):
 
         except Exception as e:
             await send_long_message(ctx, f"`{e}`", MAX_MESSAGE_LENGTH)
-            logging.error(f"\n{e}")
+            logging.error(traceback.format_exc())
 
         finally:
             try:

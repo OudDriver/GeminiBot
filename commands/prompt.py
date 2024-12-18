@@ -2,16 +2,20 @@ import ssl
 import json
 import datetime
 import traceback
+import os
+import re
+import asyncio
+import logging
+import discord
 from discord.ext import commands
-from google.genai.types import GenerateContentConfig, SafetySetting
+from google.genai.types import GenerateContentConfig, SafetySetting, Part, FunctionResponse
 from google.genai import Client
 
-from packages.utils import *
-from packages.youtube import *
-from packages.tex import *
+from packages.utils import clean_text,create_grounding_markdown, send_long_messages, send_long_message
+from packages.youtube import handle_youtube
+from packages.tex import render_latex, split_tex, check_tex
 from packages.uwu import Uwuifier
-
-
+from packages.file_utils import handle_attachment, wait_for_file_active
 
 CONFIG = json.load(open("config.json"))
 
@@ -26,6 +30,11 @@ output = ""
 ctxGlob = None
 memory = None
 
+BLOCKED_SETTINGS = {
+    "BLOCK_LOW_AND_ABOVE": ['LOW', 'MEDIUM', 'HIGH'],
+    'BLOCK_MEDIUM_AND_ABOVE': ['MEDIUM', 'HIGH'],
+    'BLOCK_ONLY_HIGH': ['HIGH']
+}
 
 def prompt(tools: list , genai_client: Client):
     @commands.hybrid_command(name="prompt")
@@ -51,7 +60,6 @@ def prompt(tools: list , genai_client: Client):
                 SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold=SAFETY_SETTING),
                 SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold=SAFETY_SETTING),
                 SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold=SAFETY_SETTING),
-                SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold=SAFETY_SETTING),
                 SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold=SAFETY_SETTING)
             ]
 
@@ -93,12 +101,12 @@ def prompt(tools: list , genai_client: Client):
                 # Download the files and upload them
                 if link and not tools == "google_search_retrieval":
                     logging.info(f"Found Link {link}")
-                    file_names_from_func, uploaded_files_from_func = await handle_youtube(link)
+                    file_names_from_func, uploaded_files_from_func = await handle_youtube(link, genai_client)
 
                     file_names.extend(file_names_from_func)
                     uploaded_files.extend(uploaded_files_from_func)
 
-                tasks = [handle_attachment(attachment) for attachment in ctx.message.attachments if not tools == "google_search_retrieval"]
+                tasks = [handle_attachment(attachment, genai_client) for attachment in ctx.message.attachments if not tools == "google_search_retrieval"]
                 results = await asyncio.gather(*tasks)
 
                 for result in results:
@@ -107,10 +115,10 @@ def prompt(tools: list , genai_client: Client):
 
                 # Waits until the file is active
                 if uploaded_files:
-                    for uploadedFile in uploaded_files:
-                        await wait_for_file_active(uploadedFile)
-                        logging.info(f"{genai.get_file(uploadedFile.name).display_name} is active at server")
-                        final_prompt.append(uploadedFile)
+                    for uploaded_file in uploaded_files:
+                        await wait_for_file_active(uploaded_file)
+                        logging.info(f"{uploaded_file.name} is active at server")
+                        final_prompt.append(Part.from_uri(uploaded_file.uri, uploaded_file.mime_type))
 
                 # Added context, such as the reply and the  user
                 if ctx.message.reference:
@@ -121,16 +129,23 @@ def prompt(tools: list , genai_client: Client):
                     final_prompt.insert(0,
                                         f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id}: ")
 
-                if tools == "google_search_retrieval":
-                    final_prompt = final_prompt[0] + final_prompt[1]
-
                 logging.info(f"Got Final Prompt {final_prompt}")
 
-                response = chat.send_message(final_prompt)
+                response = await asyncio.to_thread(chat.send_message, final_prompt)
+
+                if response.candidates[0].finish_reason == "SAFETY":
+                    blocked_category = []
+                    for safety in response.candidates[0].safety_ratings:
+                        if safety.probability in BLOCKED_SETTINGS[SAFETY_SETTING]:
+                            blocked_category.append(safety.category)
+
+                    # noinspection PyTypeChecker
+                    await ctx.reply(f"This response was blocked due to safety concerns, {''.join(blocked_category)}", ephemeral=True)
+                    logging.warning(f"Response blocked due to safety: {response.candidates[0].safety_ratings}")
+                    return
 
                 func_call_result = {}
                 function_call = False
-
 
                 # Loops until there is no more function calling left.
                 while True:
@@ -163,8 +178,8 @@ def prompt(tools: list , genai_client: Client):
                         # Adds the function calling output
                         # noinspection PyTypeChecker
                         response_parts = [
-                            genai.protos.Part(
-                                function_response=genai.protos.FunctionResponse(name=fn, response={"result": val})) for
+                            Part(
+                                function_response=FunctionResponse(name=fn, response={"result": val})) for
                             fn, val in func_call_result.items()
                         ]
                         response = chat.send_message(response_parts)
@@ -212,9 +227,6 @@ def prompt(tools: list , genai_client: Client):
             error_message = f"`{e}`\nPerhaps, you can try your request again!"
             logging.error(f"Error: {error_message}")
             await send_long_message(ctx, error_message, MAX_MESSAGE_LENGTH)
-
-        except genai.types.StopCandidateException as e:
-            await send_long_message(ctx, f"{e}\nThat means your prompt isn't safe! Try again!", MAX_MESSAGE_LENGTH)
 
         except Exception as e:
             await send_long_message(ctx, f"`{e}`", MAX_MESSAGE_LENGTH)

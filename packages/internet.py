@@ -14,18 +14,13 @@ with open('config.json') as f:
 
 genai.configure(api_key=config['GeminiAPIkey'])
 
-def search_duckduckgo(query: str, max_results: int = 1, instant_answers: bool = True, regular_search_queries: bool = True, get_website_content: bool = False) -> \
-list[dict[str, str]] | str:
+def search_duckduckgo(query: str, max_results: int, get_website_content: bool) -> list[dict[str, str]] | str:
     """Searches DuckDuckGo for a given query and returns a list of results.
 
     Args:
-        query: The search query. Required.
-        max_results: The maximum number of results to return. Optional.
-        instant_answers: Whether to include instant answers in the results. Either this or regular_search_queries must be True. Both can be True.
-                         If an instant answer is found, only the instant answer is returned. Either this or instant_answers must be True. Both can be True.
-        regular_search_queries: Whether to perform a regular search if no instant answer is found.
-        get_website_content: Whether to fetch the content of each website in the search results.
-                             Recommended for more details. Set this value to True if needed.
+        query: The search query.
+        max_results: The maximum number of results to return.
+        get_website_content: Whether to fetch the content of each website in the search results. Recommended for more details. Set this value to True if needed.
 
     Returns:
         A list of dictionaries, where each dictionary represents a search result. 
@@ -41,6 +36,8 @@ list[dict[str, str]] | str:
             - href: The URL of the search result.
             - body: The content of the website (if `get_website_content` is True), otherwise None.
     """
+    instant_answers = True
+    regular_search_queries = True
     max_result = int(max_results)
     query = query.strip("\"'")
     with DDGS() as ddgs:

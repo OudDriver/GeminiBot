@@ -74,12 +74,12 @@ async def send_long_messages(ctx, messages, length):
         elif isinstance(message, discord.File):
             await ctx.reply(file=message)
         
-def timeout(member_id: int, duration: int = 60, reason: str = None):
+def timeout(member_id: int, duration: int, reason: str):
     """Timeouts a Discord member using their ID for a specified duration. Do not use scientific notation. (It actually works)
 
         Args:
             member_id: The user's ID.
-            duration: Duration in seconds. Default is 60 seconds.
+            duration: Duration in seconds.
             reason: The reason why the user is timed out.
     """
     async def _mute(mem_id: int, dur: int, r: str = None):

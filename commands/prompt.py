@@ -27,7 +27,7 @@ ctxGlob = None
 memory = None
 
 
-def prompt(tools: list, genai_client: Client):
+def prompt(tools: list , genai_client: Client):
     @commands.hybrid_command(name="prompt")
     async def command(ctx: commands.Context, *, message: str):
         """
@@ -54,6 +54,7 @@ def prompt(tools: list, genai_client: Client):
                 SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold=SAFETY_SETTING),
                 SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold=SAFETY_SETTING)
             ]
+
             config = GenerateContentConfig(system_instruction=configs['system_prompt'], tools=tools, safety_settings=safety_settings)
 
             # Start a new chat or resume from existing memory

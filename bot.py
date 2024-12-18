@@ -1,6 +1,7 @@
 from discord.ext import commands
 from discord import app_commands
-import google.genai as genai
+from google import genai
+from google.genai.types import GoogleSearch, ToolCodeExecution, Tool, FunctionDeclaration
 import discord
 import json
 import logging
@@ -20,9 +21,9 @@ CONFIG = json.load(open("config.json"))
 # Define system prompts and available tools for the bot
 SYSTEM_PROMPTS = CONFIG["SystemPrompts"]
 TOOLS = {
-    "Default": [make_get_request],
-    "Google Search": 'google_search',
-    "Code Execution": 'code_execution'
+    "Default": [get_weather, make_get_request, get_wikipedia_page, wolfram_alpha, hi, timeout, execute_code, search_duckduckgo],
+    "Google Search": [Tool(google_search=GoogleSearch())],
+    "Code Execution": [Tool(code_execution=ToolCodeExecution())]
 }
 
 # Configure Google Gemini API key

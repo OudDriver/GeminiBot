@@ -156,7 +156,7 @@ class WolframAlphaFullAPI(WolframAlphaAPI):
 
 def wolfram_alpha(query: str, show_steps: bool, raw: bool):
     """
-    Sends a query to the Wolfram Alpha API. WolframAlpha can answer the simplest math questions to hard math questions.
+    Sends a query to the Wolfram Alpha API. WolframAlpha can answer the simplest math questions to hard math questions. All arguments are required.
     
     Args:
         query: The input string for the query.

@@ -1,3 +1,4 @@
+import logging
 import re
 import random
 
@@ -36,7 +37,7 @@ def get_capital_percentage(word):
 class Uwuifier:
     DEFAULTS = {
         "WORDS": 0.2,
-        "SPACES": {"faces": 0.05, "actions": 0.05, "stutters": 0.1},
+        "SPACES": {"faces": 0.175 * 4/5, "actions": 0.15, "stutters": 0.15 * 4/5},
         "EXCLAMATIONS": 0.8,
     }
 
@@ -59,27 +60,27 @@ class Uwuifier:
             ":3",
             "x3",
         ]
-        self.exclamations = ["!?", "?!!", "?!?1", "!!11", "?!?!"]
+        self.exclamations = ["!?", "?!!", "?!?1", "!!11", "?!?!", "1!!1!"]
         self.actions = [
-            "*blushes*",
-            "*whispers to self*",
-            "*cries*",
-            "*screams*",
-            "*sweats*",
-            "*twerks*",
-            "*runs away*",
-            "*screeches*",
-            "*walks away*",
-            "*begins interpretative dance*",
-            "*looks at you*",
-            "*notices buldge*",
-            "*starts twerking*",
-            "*huggles tightly*",
-            "*boops your nose*",
-            '*drops armful of books*'
+            r"\*blushes\*",
+            r"\*whispers to self\*",
+            r"\*cries\*",
+            r"\*screams\*",
+            r"\*sweats\*",
+            r"\*twerks\*",
+            r"\*runs away\*",
+            r"\*screeches\*",
+            r"\*walks away\*",
+            r"\*begins interpretative dance\*",
+            r"\*looks at you\*",
+            r"\*notices buldge\*",
+            r"\*starts twerking\*",
+            r"\*huggles tightly\*",
+            r"\*boops your nose\*",
+            r'\*drops armful of books\*'
         ]  # Thanks bartoneye for some of the actions!
         self.uwu_map = [
-            [re.compile(r"(?:r|l)", re.IGNORECASE), "w"],
+            [re.compile(r"[rl]", re.IGNORECASE), "w"],
             [re.compile(r"n([aeiou])", re.IGNORECASE), r"ny\1"],
             [re.compile(r"ove", re.IGNORECASE), "uv"],
         ]
@@ -217,6 +218,9 @@ class Uwuifier:
         """Applies all uwuification transforms to a given sentence."""
         uwuified_string = sentence
         uwuified_string = self.uwuify_words(uwuified_string)
+        logging.info("Uwuified words.")
         uwuified_string = self.uwuify_exclamations(uwuified_string)
+        logging.info("Uwuified exclamations.")
         uwuified_string = self.uwuify_spaces(uwuified_string)
+        logging.info("Uwuified string.")
         return uwuified_string

@@ -8,6 +8,7 @@ venv/
 .idea/
 
 bot.log
+memory.txt
 
 temp/
 config.json

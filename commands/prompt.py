@@ -8,14 +8,15 @@ import asyncio
 import logging
 import discord
 from discord.ext import commands
-from google.genai.types import GenerateContentConfig, SafetySetting, Part, FunctionResponse
+from google.genai.types import GenerateContentConfig, SafetySetting, Part, FunctionResponse, AutomaticFunctionCallingConfig
 from google.genai import Client
 
-from packages.utils import clean_text,create_grounding_markdown, send_long_messages, send_long_message
+from packages.utils import clean_text, create_grounding_markdown, send_long_messages, send_long_message, format_args
 from packages.youtube import handle_youtube
 from packages.tex import render_latex, split_tex, check_tex
 from packages.uwu import Uwuifier
 from packages.file_utils import handle_attachment, wait_for_file_active
+from packages.memory_save import load_memory
 
 CONFIG = json.load(open("config.json"))
 
@@ -27,7 +28,7 @@ SAFETY_SETTING = CONFIG["HarmBlockThreshold"]
 thought = ""
 secrets = ""
 output = ""
-ctxGlob = None
+ctx_glob = None
 memory = None
 
 BLOCKED_SETTINGS = {
@@ -46,7 +47,7 @@ def prompt(tools: list , genai_client: Client):
             ctx: The context of the command invocation
             message: The message to send the bot
         """
-        global ctxGlob, thought, output, memory, secrets
+        global ctx_glob, thought, output, memory, secrets
         try:
             # Load configuration from temporary JSON file
             with open("temp/temp_config.json", "r") as TEMP_CONFIG:
@@ -63,12 +64,12 @@ def prompt(tools: list , genai_client: Client):
                 SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold=SAFETY_SETTING)
             ]
 
-            config = GenerateContentConfig(system_instruction=configs['system_prompt'], tools=tools, safety_settings=safety_settings)
+            config = GenerateContentConfig(system_instruction=configs['system_prompt'], tools=tools, safety_settings=safety_settings, automatic_function_calling=AutomaticFunctionCallingConfig(disable=True, maximum_remote_calls=0))
 
             # Start a new chat or resume from existing memory
-            chat = genai_client.chats.create(history=memory, model=model, config=config) if memory else genai_client.chats.create(model=model, config=config)
-            ctxGlob = ctx
-
+            chat = genai_client.aio.chats.create(history=memory, model=model, config=config) if memory else genai_client.aio.chats.create(model=model, config=config)
+            ctx_glob = ctx
+            
             async with ctx.typing():
                 # Clear context if message is {clear}
                 if message.lower() == "{clear}":
@@ -79,6 +80,7 @@ def prompt(tools: list , genai_client: Client):
                         return
                     else:
                         await ctx.reply("You don't have the necessary permissions for this!", ephemeral=True)
+                        return
 
                 # Check for bad words and handle accordingly
                 for word in CONFIG["BadWords"]:
@@ -129,9 +131,14 @@ def prompt(tools: list , genai_client: Client):
                     final_prompt.insert(0,
                                         f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id}: ")
 
+                if not memory:
+                    mem = load_memory()
+                    if mem:
+                        final_prompt.insert(0, f"This is the memory you saved: {mem}")
+
                 logging.info(f"Got Final Prompt {final_prompt}")
 
-                response = await asyncio.to_thread(chat.send_message, final_prompt)
+                response = await chat.send_message(final_prompt)
 
                 if response.candidates[0].finish_reason == "SAFETY":
                     blocked_category = []
@@ -149,16 +156,15 @@ def prompt(tools: list , genai_client: Client):
 
                 # Loops until there is no more function calling left.
                 while True:
-                    if isinstance(tools, str):
-                        break
-
                     # Manual function calling system
                     for part in response.candidates[0].content.parts:
                         if fn := part.function_call:
                             function_call = True
 
+                            args = format_args(fn.args)
+
                             # Joins the arguments
-                            arg_output = ", ".join(f"{key}={val}" for key, val in fn.args.items())
+                            arg_output = ", ".join(f"{key}={val}" for key, val in args.items())
                             logging.info(f"{fn.name}({arg_output})")
 
                             # Finds the function
@@ -167,8 +173,6 @@ def prompt(tools: list , genai_client: Client):
                                 if f.__name__ == fn.name:
                                     func = f
                                     break
-
-                            args = fn.args
 
                             # Calls the function
                             result = func(**args)
@@ -182,7 +186,7 @@ def prompt(tools: list , genai_client: Client):
                                 function_response=FunctionResponse(name=fn, response={"result": val})) for
                             fn, val in func_call_result.items()
                         ]
-                        response = chat.send_message(response_parts)
+                        response = await chat.send_message(response_parts)
                         function_call = False
 
                     else:

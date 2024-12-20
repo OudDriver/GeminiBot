@@ -1,7 +1,7 @@
 from discord.ext import commands
 from discord import app_commands
 from google import genai
-from google.genai.types import GoogleSearch, ToolCodeExecution, Tool, FunctionDeclaration
+from google.genai.types import GoogleSearch, ToolCodeExecution, Tool
 import discord
 import json
 import logging
@@ -14,6 +14,7 @@ from packages.internet import search_duckduckgo, make_get_request, get_wikipedia
 from packages.weather import get_weather
 from packages.wolfram import wolfram_alpha
 from packages.utils import timeout, hi, execute_code
+from packages.memory_save import save_memory
 
 # Load configuration from config.json
 CONFIG = json.load(open("config.json"))
@@ -21,7 +22,7 @@ CONFIG = json.load(open("config.json"))
 # Define system prompts and available tools for the bot
 SYSTEM_PROMPTS = CONFIG["SystemPrompts"]
 TOOLS = {
-    "Default": [get_weather, make_get_request, get_wikipedia_page, wolfram_alpha, hi, timeout, execute_code, search_duckduckgo],
+    "Default": [get_weather, make_get_request, get_wikipedia_page, wolfram_alpha, hi, timeout, execute_code, search_duckduckgo, save_memory],
     "Google Search": [Tool(google_search=GoogleSearch())],
     "Code Execution": [Tool(code_execution=ToolCodeExecution())]
 }
@@ -54,6 +55,7 @@ with open("temp/temp_config.json", "w") as TEMP_CONFIG:
 # Set up Discord bot with intents
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 client = commands.Bot(command_prefix='!', intents=intents)
 
 # Configure logging to file and console

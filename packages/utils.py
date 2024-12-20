@@ -1,4 +1,6 @@
 from datetime import timedelta
+from typing import Any
+from google.genai.types import Candidate
 import time
 import random
 import string
@@ -9,10 +11,8 @@ import sys
 import io
 import re
 import nest_asyncio
-import google.ai.generativelanguage_v1beta.types.generative_service
 
 from packages.maps import subscript_map, superscript_map
-
 
 nest_asyncio.apply()
 
@@ -74,56 +74,63 @@ async def send_long_messages(ctx, messages, length):
         elif isinstance(message, discord.File):
             await ctx.reply(file=message)
         
-def timeout(member_id: int, duration: int, reason: str):
-    """Timeouts a Discord member using their ID for a specified duration. Do not use scientific notation. (It actually works)
+def timeout(member_id: str, duration: int, reason: str):
+    """Timeouts a Discord member using their ID for a specified duration.
 
         Args:
             member_id: The user's ID.
             duration: Duration in seconds.
             reason: The reason why the user is timed out.
     """
+    member_id = int(member_id)
+    logging.info(f"Attempting to time out {member_id}")
     async def _mute(mem_id: int, dur: int, r: str = None):
         if dur <= 0:
             return "Time must be a positive integer"
         
-        from commands.prompt import ctxGlob
+        from commands.prompt import ctx_glob
         
-        guild = ctxGlob.guild
+        guild = ctx_glob.guild
         try:
             member = await guild.fetch_member(mem_id)
             if member is None:
-                await ctxGlob.send("Member not found in this server.")
+                await ctx_glob.send("Member not found in this server.")
                 return
 
             await member.timeout(timedelta(seconds=dur), reason=r)
-            await ctxGlob.send(f"Member with ID {mem_id} has been timed out for {dur} seconds. Reason: {r}")
+            logging.info(f"Member with ID {mem_id} has been timed out for {dur} seconds. Reason: {r}")
+            await ctx_glob.send(f"Member with ID {mem_id} has been timed out for {dur} seconds. Reason: {r}")
             return f"Successful! Member with ID {mem_id} has been timed out for {dur} seconds. Reason: {r}"
         except discord.Forbidden:
-            await ctxGlob.send("Missing Permission!")
-            return "Missing Permissions. Ping <@578997249741160467> to fix."
+            logging.info("Missing Permission!")
+            await ctx_glob.send("Missing Permission!")
+            return f"Missing Permissions. Ping <@{ctx_glob.guild.owner.id}> to fix."
         except discord.HTTPException as e:
-            await ctxGlob.send(e)
-            return f"Something Happened. {e}"
+            logging.info(e)
+            await ctx_glob.send(e)
+            return f"{e}. If it is 404, double check the user ID input, got {member_id}."
         
-    loop = asyncio.get_running_loop() 
-    return loop.run_until_complete(_mute(member_id, duration, reason))
+    loop = asyncio.get_running_loop()
+    try:
+        return loop.run_until_complete(_mute(member_id, duration, reason))
+    except RuntimeError as e:
+        logging.error(e)
 
 def send(message: str):
     async def _send(msg):
-        from commands.prompt import ctxGlob
-        await ctxGlob.send(msg)
+        from commands.prompt import ctx_glob
+        await ctx_glob.send(msg)
         
     loop = asyncio.get_running_loop() 
     loop.run_until_complete(_send(message))
-    
-def reply(message: str):
-    async def _reply(msg):
-        from commands.prompt import ctxGlob
-        await ctxGlob.reply(msg)
-    
-    loop = asyncio.get_running_loop() 
-    loop.run_until_complete(_reply(message))
-    
+
+# It's useless now but may not be useless in the near future... Maybe.
+def format_args(args: dict[str: Any]) -> dict[str: Any]:
+    formatted = {}
+    for key, val in args.items():
+        formatted[key] = val
+    return formatted
+
 def hi():
     """
     A test function that says hi.
@@ -133,7 +140,7 @@ def hi():
     return "SassBot Said Hi!"
     
 def execute_code(code_string: str):
-    """Executes Python code from a string and captures the output.
+    """Executes Python code from a string and captures the output. Do not use this to run interactive code to the user, it will not work. Only use this for calculations.
 
     Args:
         code_string: The string containing the Python code to execute.
@@ -141,9 +148,16 @@ def execute_code(code_string: str):
     Returns:
         The standard output or standard error captured during code execution
     """
+    from commands.prompt import ctx_glob
+
+    async def reply(msg):
+        await ctx_glob.reply(msg)
+
+    loop = asyncio.get_event_loop()
+    
     encoded_string = code_string.encode().decode('unicode_escape')
     
-    logging.info('\n' + encoded_string)
+    logging.info('Going to run:\n' + encoded_string)
 
     # Redirect stdout and stderr to capture output
     old_stdout = sys.stdout
@@ -153,16 +167,21 @@ def execute_code(code_string: str):
 
     # Use provided global_namespace or create a new one
     global_namespace = {}
+
     try:
         # Execute the code in the custom global namespace
         exec(encoded_string, global_namespace)
     except Exception as e:
         # Capture the error message
-        captured_stderr.write(f"Error during code execution: {e}") 
-        final = f"Code:\n```py\n{encoded_string}\n```\nError:`{captured_stderr.getvalue()}`"
+        captured_stderr.write(f"{e}")
+        final = f"Code:\n```py\n{encoded_string}\n```\nError:\n```{captured_stderr.getvalue()}```"
         
         logging.info(captured_stderr.getvalue())
-        reply(final)
+
+        try:
+            loop.run_until_complete(reply(final))
+        except RuntimeError as e:
+            logging.error(e)
         
         return captured_stderr.getvalue()
     finally:
@@ -170,11 +189,19 @@ def execute_code(code_string: str):
         sys.stdout = old_stdout
         sys.stderr = old_stderr
 
-    final = f"Code:\n```py\n{encoded_string}\n```\nOutput:\n```\n{captured_stdout.getvalue()}\n```"
-    reply(final)
-    return captured_stdout.getvalue()
+    captured = captured_stdout.getvalue()
 
-def create_grounding_markdown(candidates: google.ai.generativelanguage_v1beta.types.generative_service.Candidate):
+    final = f"Code:\n```py\n{encoded_string}\n```\nOutput:\n```\n{captured}```"
+
+    logging.info(final)
+    try:
+        loop.run_until_complete(reply(final))
+    except RuntimeError as e:
+        logging.error(e)
+
+    return captured
+
+def create_grounding_markdown(candidates: list[Candidate]):
     """
     Parses JSON data and creates a markdown string of grounding sources.
 

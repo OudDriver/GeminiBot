@@ -9,6 +9,7 @@ import logging
 from commands.prompt import prompt
 from commands.sync import sync
 from commands.thought import thought, secret
+from commands.voice import voice, leave
 
 from packages.internet import search_duckduckgo, make_get_request, get_wikipedia_page
 from packages.weather import get_weather
@@ -28,7 +29,7 @@ TOOLS = {
 }
 
 # Configure Google Gemini API key
-genai_client = genai.Client(api_key=CONFIG['GeminiAPIkey'])
+genai_client = genai.Client(api_key=CONFIG['GeminiAPIkey'], http_options={'api_version': 'v1alpha'})
 
 # Initialize system prompt
 current_sys_prompt_index = 0
@@ -194,6 +195,8 @@ client.add_command(prompt(active_tools, genai_client))
 client.add_command(sync)
 client.add_command(thought)
 client.add_command(secret)
+client.add_command(voice(genai_client))
+client.add_command(leave)
 
 # Run the bot with the token from the configuration
 client.run(CONFIG['DiscordToken'])

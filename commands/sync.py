@@ -1,5 +1,4 @@
 from discord.ext import commands
-from discord.app_commands.models import AppCommand
 import json
 
 with open('config.json') as f:

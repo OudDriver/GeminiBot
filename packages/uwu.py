@@ -179,7 +179,8 @@ class Uwuifier:
             uwuified_sentence.append(word)
         return " ".join(uwuified_sentence)
 
-    def _check_capitalization(self, words, word, index, first_character):
+    @staticmethod
+    def _check_capitalization(words, word, index, first_character):
         if first_character != first_character.upper():
             return
         if get_capital_percentage(word) > 0.5:

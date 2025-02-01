@@ -1,26 +1,13 @@
 from discord.ext import commands, voice_recv
-from packages.audio import live
+from packages.audio import live, AudioSink, AudioSource
 from google.genai import Client
 import discord
 import asyncio
 
-voice_client = None
-audio_queue = None
 audio_sink = None
+audio_queue = asyncio.Queue()
 
-class AudioSink(voice_recv.AudioSink):
-    def __init__(self, audio_queue):
-        self.audio_queue = audio_queue
-
-    def write(self, user, data):
-        pcm = data.pcm
-        self.audio_queue.put_nowait(pcm)
-
-    def wants_opus(self):
-        return False
-
-    def cleanup(self):
-        return
+voice_client = None
 
 def voice(genai_client: Client):
     @commands.hybrid_command(name="voice")
@@ -32,10 +19,17 @@ def voice(genai_client: Client):
             await ctx.send("You are not in a voice channel.")
             return
 
-        channel = ctx.author.voice.channel
-
         try:
+            channel = ctx.author.voice.channel
             voice_client = await channel.connect(cls=voice_recv.VoiceRecvClient)
+            audio_sink = AudioSink(audio_queue)
+            voice_client.listen(audio_sink)
+            asyncio.create_task(
+                live(audio_queue, genai_client, 'gemini-2.0-flash-exp', {"response_modalities": ["AUDIO"]}))
+
+            audio_source = AudioSource()
+            voice_client.play(audio_source)
+            await ctx.send(f"Joined **{channel.name}**!")
         except discord.ClientException:
             await ctx.send("I am already in a voice channel")
             return
@@ -44,17 +38,10 @@ def voice(genai_client: Client):
             await ctx.send("Failed to join your voice channel.")
             return
 
-        audio_queue = asyncio.Queue()
-        audio_sink = AudioSink(audio_queue)
-        voice_client.listen(audio_sink)
-        asyncio.create_task(live(audio_queue, genai_client, 'gemini-2.0-flash-exp', {"response_modalities": ["TEXT"]}))
-
-        await ctx.send(f"Joined **{channel.name}**!")
-
     return command
 
 @commands.hybrid_command()
-async def leave(ctx):
+async def leave(ctx: commands.Context):
     global voice_client, audio_queue, audio_sink
 
     if voice_client is None:

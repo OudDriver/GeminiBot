@@ -1,10 +1,8 @@
 from pytubefix import YouTube
 from google import genai
-from google.genai.types import File
 import asyncio, re
 import logging
 import os
-import time
 
 from packages.utils import generate_unique_file_name
 

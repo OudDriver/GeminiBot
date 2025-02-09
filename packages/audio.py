@@ -4,6 +4,7 @@ from discord.ext import voice_recv
 import discord
 from librosa import resample
 import logging
+import traceback
 
 unsorted_queue = asyncio.Queue(maxsize=200)
 sorted_queue = asyncio.Queue(maxsize=200)
@@ -33,8 +34,9 @@ class AudioSource(discord.PCMAudio):
         except asyncio.QueueEmpty:
             # Returns empty bytes
             return bytes(3840)
-        except Exception as e:
-            logging.error(f"Error in AudioSource.read function: {e}")
+        except Exception:
+            # log error with the traceback
+            logging.error(traceback.format_exc())
 
             # Returns empty bytes
             return bytes(3840)
@@ -62,6 +64,26 @@ def resample_audio(data: bytes, source_rate: int, target_rate: int) -> bytes:
 
     return resampled_data_int.tobytes()
 
+# TODO refactor this with the above function
+def resample_audio_2(data: bytes, source_rate: int, target_rate: int) -> bytes:
+    if source_rate == target_rate:
+        return data
+
+    # Convert byte data to a NumPy array of floats (normalized to approximately [-1, 1])
+    data_np = np.frombuffer(data, dtype=np.int16).astype(np.float32) / (2 ** 15 - 1)
+
+    # Resample the audio data using librosa
+    resampled_data = resample(data_np, orig_sr=source_rate, target_sr=target_rate)
+
+    # Check for NaN values
+    if np.isnan(resampled_data).any():
+        logging.warning("NaN values detected in resampled audio.")
+        resampled_data = np.nan_to_num(resampled_data, nan=0)
+
+    # Scale back to int16 range and convert to int16
+    resampled_data_int = (resampled_data * (2 ** 15 - 1)).astype(np.int16)
+
+    return resampled_data_int.tobytes()
 
 async def get_audio(audio_queue: asyncio.Queue):
     while True:
@@ -78,32 +100,34 @@ async def get_audio(audio_queue: asyncio.Queue):
         finally:
             audio_queue.task_done()
 
-async def process_audio(queue: asyncio.Queue, output_queue: asyncio.Queue, chunk_size: int = 3840):
-    # Initialize an empty bytearray to store incoming audio data.
+async def process_audio(queue: asyncio.Queue, output_queue: asyncio.Queue, chunk_size: int = 1920):  # Kind of sketchy since the docstring says that it is supposed to be 3840 but whatever
     buffer = bytearray()
+    start = 0  # Track the start of unprocessed data
 
     while True:
         try:
-            # Get audio bytes from the input queue.
             audio_bytes = await queue.get()
-
-            # If audio_bytes is not None, extend the buffer with the new audio data. If None, extend by empty bytes to skip adding it to the buffer
+            # Extend buffer with new data; None is treated as empty bytes
             buffer.extend(audio_bytes if audio_bytes is not None else b'')
 
-            # Process audio chunks while the buffer has enough data to form a complete chunk.
-            while len(buffer) >= chunk_size:
-                # Extract a chunk of audio data from the buffer.
-                chunk = bytes(buffer[:chunk_size])
+            # Process as many chunks as possible from the current buffer
+            while len(buffer) - start >= chunk_size:
+                end = start + chunk_size
+                chunk = bytes(buffer[start:end])
+                chunk_resampled = resample_audio_2(chunk, 24000, 48000)
+                await output_queue.put(chunk_resampled)
+                start = end  # Move the start forward by the chunk size
 
-                del buffer[:chunk_size]
-                await output_queue.put(chunk)
+            # Trim processed data from the buffer and reset start if needed
+            if start > 0:
+                buffer = buffer[start:]
+                start = 0
+
         except asyncio.CancelledError:
             logging.warning("Audio processing task cancelled")
             break
         except Exception as e:
             logging.error(f"Error in process_audio function: {e}")
-
-
 
 async def live(audio_queue, client, model_id, config):
     asyncio.create_task(process_audio(unsorted_queue, sorted_queue))

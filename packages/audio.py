@@ -83,7 +83,7 @@ def resample_audio_2(data: bytes, source_rate: int, target_rate: int) -> bytes:
     # Scale back to int16 range and convert to int16
     resampled_data_int = (resampled_data * (2 ** 15 - 1)).astype(np.int16)
 
-    # TODO seperate this into a seperate function
+    # TODO separate this into a separate function
     interleaved_data = np.empty((1920,), dtype=np.int16)
     interleaved_data[0::2] = resampled_data_int
     interleaved_data[1::2] = resampled_data_int

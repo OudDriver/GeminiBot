@@ -49,7 +49,7 @@ def resample_audio(data: bytes, source_rate: int, target_rate: int) -> bytes:
         return data
 
     # Convert byte data to a NumPy array of floats (normalized to approximately [-1, 1])
-    data_np = np.frombuffer(data, dtype=np.int32).astype(np.float32) / (2 ** 31 - 1)
+    data_np = np.frombuffer(data, dtype=np.int32).astype(np.float64) / (2 ** 31 - 1)
 
     # Resample the audio data using librosa
     resampled_data = resample(data_np, orig_sr=source_rate, target_sr=target_rate)
@@ -64,13 +64,13 @@ def resample_audio(data: bytes, source_rate: int, target_rate: int) -> bytes:
 
     return resampled_data_int.tobytes()
 
-# TODO refactor this with the above function
+# TODO refactor this with the above function, and fix the clicking sound
 def resample_audio_2(data: bytes, source_rate: int, target_rate: int) -> bytes:
     if source_rate == target_rate:
         return data
 
     # Convert byte data to a NumPy array of floats (normalized to approximately [-1, 1])
-    data_np = np.frombuffer(data, dtype=np.int16).astype(np.float32) / (2 ** 15 - 1)
+    data_np = np.frombuffer(data, dtype=np.int16).astype(np.float64) / (2 ** 15 - 1)
 
     # Resample the audio data using librosa
     resampled_data = resample(data_np, orig_sr=source_rate, target_sr=target_rate)
@@ -83,7 +83,12 @@ def resample_audio_2(data: bytes, source_rate: int, target_rate: int) -> bytes:
     # Scale back to int16 range and convert to int16
     resampled_data_int = (resampled_data * (2 ** 15 - 1)).astype(np.int16)
 
-    return resampled_data_int.tobytes()
+    # TODO seperate this into a seperate function
+    interleaved_data = np.empty((1920,), dtype=np.int16)
+    interleaved_data[0::2] = resampled_data_int
+    interleaved_data[1::2] = resampled_data_int
+
+    return interleaved_data.tobytes()
 
 async def get_audio(audio_queue: asyncio.Queue):
     while True:
@@ -100,7 +105,7 @@ async def get_audio(audio_queue: asyncio.Queue):
         finally:
             audio_queue.task_done()
 
-async def process_audio(queue: asyncio.Queue, output_queue: asyncio.Queue, chunk_size: int = 1920):  # Kind of sketchy since the docstring says that it is supposed to be 3840 but whatever
+async def process_audio(queue: asyncio.Queue, output_queue: asyncio.Queue, chunk_size: int = 960):  # Kind of sketchy since the docstring says that it is supposed to be 3840 but whatever
     buffer = bytearray()
     start = 0  # Track the start of unprocessed data
 
@@ -126,8 +131,8 @@ async def process_audio(queue: asyncio.Queue, output_queue: asyncio.Queue, chunk
         except asyncio.CancelledError:
             logging.warning("Audio processing task cancelled")
             break
-        except Exception as e:
-            logging.error(f"Error in process_audio function: {e}")
+        except Exception:
+            logging.error(f"Error in process_audio function: {traceback.format_exc()}")
 
 async def live(audio_queue, client, model_id, config):
     asyncio.create_task(process_audio(unsorted_queue, sorted_queue))

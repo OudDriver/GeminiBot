@@ -1,3 +1,5 @@
+import logging
+import traceback
 from discord.ext import commands, voice_recv
 from packages.audio import live, AudioSink, AudioSource
 from google.genai import Client
@@ -22,19 +24,21 @@ def voice(genai_client: Client):
         try:
             channel = ctx.author.voice.channel
             voice_client = await channel.connect(cls=voice_recv.VoiceRecvClient)
+            logging.info(f"Connected to voice channel {channel.name}")
+
             audio_sink = AudioSink(audio_queue)
             voice_client.listen(audio_sink)
-            asyncio.create_task(
-                live(audio_queue, genai_client, 'gemini-2.0-flash-exp', {"response_modalities": ["AUDIO"]}))
+            asyncio.create_task(live(audio_queue, genai_client, 'gemini-2.0-flash-exp', {"response_modalities": ["AUDIO"]}))
 
             audio_source = AudioSource()
             voice_client.play(audio_source)
+            logging.info(f"Joined {channel.name}")
             await ctx.send(f"Joined **{channel.name}**!")
         except discord.ClientException:
             await ctx.send("I am already in a voice channel")
             return
         except Exception as e:
-            print(f"Error connecting to voice channel: {e}")
+            logging.error(f"Error connecting to voice channel: {traceback.format_exc()}")
             await ctx.send("Failed to join your voice channel.")
             return
 
@@ -51,7 +55,7 @@ async def leave(ctx: commands.Context):
     try:
       await voice_client.disconnect()
     except Exception as e:
-        print(f"Error disconnecting from voice channel: {e}")
+        logging.error(f"Error disconnecting from voice channel: {e}")
         await ctx.send("Failed to leave the voice channel.")
         return
     finally:

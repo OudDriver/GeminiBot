@@ -5,6 +5,7 @@ import discord
 from librosa import resample
 import logging
 import traceback
+from typing import Any
 
 unsorted_queue = asyncio.Queue(maxsize=200)
 sorted_queue = asyncio.Queue(maxsize=200)
@@ -64,7 +65,13 @@ def resample_audio(data: bytes, source_rate: int, target_rate: int) -> bytes:
 
     return resampled_data_int.tobytes()
 
-# TODO refactor this with the above function, and fix the clicking sound
+def mono_to_stereo(input_data: np.ndarray[Any, np.dtype[np.int16]]):
+    output_data_np = np.empty((len(input_data) * 2,), dtype=np.int16)
+    output_data_np[0::2] = input_data
+    output_data_np[1::2] = input_data
+    return output_data_np.tobytes()
+
+# TODO fix the clicking sound, known error too lazy to fix lmao
 def resample_audio_2(data: bytes, source_rate: int, target_rate: int) -> bytes:
     if source_rate == target_rate:
         return data
@@ -83,12 +90,9 @@ def resample_audio_2(data: bytes, source_rate: int, target_rate: int) -> bytes:
     # Scale back to int16 range and convert to int16
     resampled_data_int = (resampled_data * (2 ** 15 - 1)).astype(np.int16)
 
-    # TODO separate this into a separate function
-    interleaved_data = np.empty((1920,), dtype=np.int16)
-    interleaved_data[0::2] = resampled_data_int
-    interleaved_data[1::2] = resampled_data_int
+    interleaved_data = mono_to_stereo(resampled_data_int)
 
-    return interleaved_data.tobytes()
+    return interleaved_data
 
 async def get_audio(audio_queue: asyncio.Queue):
     while True:
@@ -144,7 +148,7 @@ async def live(audio_queue, client, model_id, config):
                 yield stream_data
 
         async with client.aio.live.connect(model=model_id, config=config) as session:
-            print("Connected. Please wait for 10 seconds as it will not work instantly for whatever reason.")
+            logging.info("Connected to Gemini Live API.")
             async for data in session.start_stream(stream=audio_stream(), mime_type='audio/pcm'):
                 await unsorted_queue.put(data.data)
     except Exception as e:

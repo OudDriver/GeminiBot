@@ -1,7 +1,6 @@
 import requests
 import httpx
 import wikipedia
-import google.generativeai as genai
 import json
 import logging
 
@@ -11,8 +10,6 @@ from typing import Any, Dict
 
 with open('config.json') as f:
     config = json.loads(f.read())
-
-genai.configure(api_key=config['GeminiAPIkey'])
 
 def search_duckduckgo(query: str, max_results: int, get_website_content: bool) -> list[dict[str, str]] | str:
     """Searches DuckDuckGo for a given query and returns a list of results.

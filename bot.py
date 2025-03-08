@@ -5,6 +5,7 @@ from google.genai.types import GoogleSearch, ToolCodeExecution, Tool
 import discord
 import json
 import logging
+import os
 
 from commands.prompt import prompt
 from commands.sync import sync
@@ -51,6 +52,10 @@ current_uwu_status = False
 # Set initial model and save temporary configuration
 current_model_index = 0
 model = model_options[current_model_index]
+
+if not os.path.isdir("./temp"):
+    os.makedirs("./temp")
+
 with open("temp/temp_config.json", "w") as TEMP_CONFIG:
     json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status}, TEMP_CONFIG)
 

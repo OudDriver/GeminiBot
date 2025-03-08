@@ -77,7 +77,11 @@ def split_tex(input_str: str) -> list:
     split_parts = re.findall(pattern, input_str)
 
     # Flatten the list and remove empty strings
-    result = [item for sublist in split_parts for item in sublist if item]
+    result = []
+    for sublist in split_parts:
+        for item in sublist:
+            if item:
+                result.append(item)
 
     return result
 

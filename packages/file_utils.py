@@ -47,7 +47,7 @@ async def handle_attachment(attachment, client: Client):
         uploaded_files = []
 
         file_names.append(file_name)
-        uploaded_file = await asyncio.to_thread(client.files.upload, path=file_name)
+        uploaded_file = await asyncio.to_thread(client.files.upload, file=file_name)
         uploaded_files.append(uploaded_file)
 
         logging.info(f"Uploaded {uploaded_file.display_name} as {uploaded_file.name}")

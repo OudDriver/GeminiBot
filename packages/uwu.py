@@ -4,7 +4,6 @@ import random
 
 MAX_UINT32 = 0xffffffff
 
-
 class Seed:
     def __init__(self, seed):
         self.seed = hash(seed) & MAX_UINT32
@@ -219,9 +218,8 @@ class Uwuifier:
         """Applies all uwuification transforms to a given sentence."""
         uwuified_string = sentence
         uwuified_string = self.uwuify_words(uwuified_string)
-        logging.info("Uwuified words.")
         uwuified_string = self.uwuify_exclamations(uwuified_string)
-        logging.info("Uwuified exclamations.")
         uwuified_string = self.uwuify_spaces(uwuified_string)
-        logging.info("Uwuified string.")
+        logging.info("Uwuified string")
+
         return uwuified_string

@@ -11,7 +11,7 @@ from discord.ext import commands
 from google.genai.types import GenerateContentConfig, SafetySetting, Part, FunctionResponse, AutomaticFunctionCallingConfig
 from google.genai import Client
 
-from packages.utils import clean_text, create_grounding_markdown, send_long_messages, send_long_message, format_args
+from packages.utils import clean_text, create_grounding_markdown, send_long_messages, send_long_message, format_args, send_image, generate_unique_file_name
 from packages.youtube import handle_youtube
 from packages.tex import render_latex, split_tex, check_tex
 from packages.uwu import Uwuifier
@@ -25,6 +25,7 @@ YOUTUBE_PATTERN = re.compile(
 MAX_MESSAGE_LENGTH = 2000
 SAFETY_SETTING = CONFIG["HarmBlockThreshold"]
 
+latest_token_count = 0
 thought = ""
 secrets = ""
 output = ""
@@ -47,7 +48,7 @@ def prompt(tools: list , genai_client: Client):
             ctx: The context of the command invocation
             message: The message to send the bot
         """
-        global ctx_glob, thought, output, memory, secrets
+        global ctx_glob, thought, output, memory, secrets, latest_token_count
         try:
             # Load configuration from temporary JSON file
             with open("temp/temp_config.json", "r") as TEMP_CONFIG:
@@ -64,12 +65,12 @@ def prompt(tools: list , genai_client: Client):
                 SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold=SAFETY_SETTING)
             ]
 
-            config = GenerateContentConfig(system_instruction=configs['system_prompt'], tools=tools, safety_settings=safety_settings, automatic_function_calling=AutomaticFunctionCallingConfig(disable=True, maximum_remote_calls=0))
+            config = GenerateContentConfig(system_instruction=configs['system_prompt'], tools=tools, safety_settings=safety_settings, automatic_function_calling=AutomaticFunctionCallingConfig(disable=True))
 
             # Start a new chat or resume from existing memory
             chat = genai_client.aio.chats.create(history=memory, model=model, config=config) if memory else genai_client.aio.chats.create(model=model, config=config)
             ctx_glob = ctx
-            
+
             async with ctx.typing():
                 # Clear context if message is {clear}
                 if message.lower() == "{clear}":
@@ -86,8 +87,7 @@ def prompt(tools: list , genai_client: Client):
                 for word in CONFIG["BadWords"]:
                     if word in ctx.message.content.lower():
                         await ctx.message.delete()
-                        await ctx.author.timeout(datetime.timedelta(minutes=10),
-                                                 reason="Saying a word blocked in the config file")
+                        await ctx.author.timeout(datetime.timedelta(minutes=10), reason="Saying a blocked word.")
                         await ctx.send(f"Chill <@{ctx.author.id}>! Don't say things like that.")
                         return
 
@@ -120,7 +120,7 @@ def prompt(tools: list , genai_client: Client):
                     for uploaded_file in uploaded_files:
                         await wait_for_file_active(uploaded_file)
                         logging.info(f"{uploaded_file.name} is active at server")
-                        final_prompt.append(Part.from_uri(uploaded_file.uri, uploaded_file.mime_type))
+                        final_prompt.append(Part.from_uri(file_uri=uploaded_file.uri, mime_type=uploaded_file.mime_type))
 
                 # Added context, such as the reply and the  user
                 if ctx.message.reference:
@@ -186,49 +186,92 @@ def prompt(tools: list , genai_client: Client):
                                 function_response=FunctionResponse(name=fn, response={"result": val})) for
                             fn, val in func_call_result.items()
                         ]
+                        logging.info(f"Sending {response_parts}")
                         response = await chat.send_message(response_parts)
                         function_call = False
 
                     else:
                         break
 
-                text = response.text
-                logging.info(f"Got Response.\n{text}")
+                latest_token_count = response.usage_metadata.total_token_count
+
+                # text = response.text
+                # logging.info(f"Got Response.\n{text}")
+
+                # Check for code execution
+                contains_code_exec = False
+                for part in response.candidates[0].content.parts:
+                    if part.executable_code is not None or part.code_execution_result is not None or part.inline_data is not None:
+                        contains_code_exec = True
+                        break
 
                 memory = chat._curated_history
 
-                text, thought_matches, secret_matches = clean_text(text)
-                thought = ""
-                secrets = ""
-                if thought_matches:
-                    for thought_match in thought_matches:
-                        thought += f"{thought_match}\n"
-                    text += "(This reply have a thought)"
-                if secret_matches:
-                    for secret_match in secret_matches:
-                        secrets += f"{secret_match}\n"
-                if tools == "google_search_retrieval":
-                    text = "### Multi-modality not supported while using the Google Search Retrieval tool.\n" + text + f"\n{create_grounding_markdown(response.candidates)}"
+                async def handle_text_only_messages():
+                    global thought, secrets
+                    text, thought_matches, secret_matches = clean_text(part.text)
+                    thought = ""
+                    secrets = ""
+                    if thought_matches:
+                        for thought_match in thought_matches:
+                            thought += f"{thought_match}\n"
+                        text += "(This reply have a thought)"
 
-                if configs['uwu']:
-                    uwu = Uwuifier()
-                    text = uwu.uwuify_sentence(text)
+                    if secret_matches:
+                        for secret_match in secret_matches:
+                            secrets += f"{secret_match}\n"
 
-                response_if_tex = split_tex(text)
+                    if tools == "google_search_retrieval":
+                        text = "### Multi-modality not supported while using the Google Search Retrieval tool.\n" + text + f"\n{create_grounding_markdown(response.candidates)}"
 
-                if len(response_if_tex) > 1:
-                    for i, tex in enumerate(response_if_tex):
-                        if check_tex(tex):
-                            logging.info(tex)
-                            file = render_latex(tex)
-                            file_names.append(file)
-                            response_if_tex[i] = discord.File(file)
-                    await send_long_messages(ctx, response_if_tex, MAX_MESSAGE_LENGTH)
+                    if configs['uwu']:
+                        uwu = Uwuifier()
+                        text = uwu.uwuify_sentence(text)
+
+                    response_if_tex = split_tex(text)
+
+                    if len(response_if_tex) > 1:
+                        for i, tex in enumerate(response_if_tex):
+                            if check_tex(tex):
+                                logging.info(tex)
+                                file_tex = render_latex(tex)
+                                file_names.append(file_tex)
+                                response_if_tex[i] = discord.File(file_tex)
+
+                        await send_long_messages(ctx, response_if_tex, MAX_MESSAGE_LENGTH)
+                    else:
+                        await send_long_message(ctx, text, MAX_MESSAGE_LENGTH)
+
+                    logging.info(f"Sent\nText:\n{text}\nThought:\n{thought}\nSecrets:\n{secrets}")
+
+                if contains_code_exec:
+                    for part in response.candidates[0].content.parts:
+                        logging.info(f"Got Code Execution Response.")
+                        if part.text is not None:
+                            await handle_text_only_messages()
+                        if part.executable_code is not None:
+                            await send_long_message(ctx, f"Code:\n```{part.executable_code.language.name.lower()}\n{part.executable_code.code}\n```", MAX_MESSAGE_LENGTH)
+                            logging.info("Ran Code Execution:\n" + part.executable_code.code)
+                        if part.code_execution_result is not None:
+                            logging.info(f"Code Execution Output:\n{part.code_execution_result.output}")
+                            await send_long_message(ctx, f"Output:\n```\n{part.code_execution_result.output}\n```", MAX_MESSAGE_LENGTH)
+                        if part.inline_data is not None: # Image
+                            logging.info("Got Code Execution Image")
+                            file_name = './temp/' + generate_unique_file_name("png")
+                            try:
+                                with open(file_name, "wb") as f:
+                                    f.write(part.inline_data.data)
+                            except Exception as e:
+                                logging.error(e)
+
+                            file_names.append(file_name)
+
+                            await send_image(ctx, file_name)
                 else:
-                    await send_long_message(ctx, text, MAX_MESSAGE_LENGTH)
+                    await handle_text_only_messages()
 
         except ssl.SSLEOFError as e:
-            error_message = f"`{e}`\nPerhaps, you can try your request again!"
+            error_message = f"`{e}`\nPerhaps, you can try again!"
             logging.error(f"Error: {error_message}")
             await send_long_message(ctx, error_message, MAX_MESSAGE_LENGTH)
 

@@ -10,6 +10,7 @@ from commands.prompt import prompt
 from commands.sync import sync
 from commands.thought import thought, secret
 from commands.voice import voice, leave
+from commands.usage import usage
 
 from packages.internet import search_duckduckgo, make_get_request, get_wikipedia_page
 from packages.weather import get_weather
@@ -197,6 +198,7 @@ client.add_command(thought)
 client.add_command(secret)
 client.add_command(voice(genai_client))
 client.add_command(leave)
+client.add_command(usage)
 
 # Run the bot with the token from the configuration
 client.run(CONFIG['DiscordToken'])

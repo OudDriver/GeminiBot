@@ -100,7 +100,7 @@ class WolframAlphaAPI:
         
         return output
     
-    def _clean_up(self, dirty_input: Dict[str, Any]) -> Dict[str, Any]:
+    def clean_up(self, dirty_input: Dict[str, Any]) -> Dict[str, Any]:
         """
         Cleans up the output from Wolfram Alpha API.
 
@@ -154,14 +154,12 @@ class WolframAlphaFullAPI(WolframAlphaAPI):
         return doc['queryresult']
 
 
-def wolfram_alpha(query: str, show_steps: bool, raw: bool):
+def wolfram_alpha(query: str):
     """
-    Sends a query to the Wolfram Alpha API. WolframAlpha can answer the simplest math questions to hard math questions. All arguments are required.
+    Sends a query to the Wolfram Alpha API.
     
     Args:
         query: The input string for the query.
-        show_steps: Whether to show the steps or not.
-        raw: Whether to return the raw output. Use this when the cleaned output doesn't work.
         
     Returns:
         A dictionary representing the query result.
@@ -169,12 +167,8 @@ def wolfram_alpha(query: str, show_steps: bool, raw: bool):
     client = WolframAlphaFullAPI(json.load(open("config.json"))['WolframAPI'])
     
     loop = asyncio.get_running_loop()
-    output = loop.run_until_complete(client.query(query, show_steps))
-    
+    output = loop.run_until_complete(client.query(query, False))
+
     logging.info(output)
-    
-    if raw:
-        return output
-    else:
-        logging.info(client._clean_up(output))
-        return client._clean_up(output)
+    logging.info(client.clean_up(output))
+    return client.clean_up(output)

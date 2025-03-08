@@ -16,7 +16,7 @@ from packages.maps import subscript_map, superscript_map
 
 nest_asyncio.apply()
 
-def generate_unique_file_name(extension):
+def generate_unique_file_name(extension: str):
     """
     Generates a unique filename using the current timestamp and a random string.
     """
@@ -65,6 +65,10 @@ async def send_long_message(ctx, message, length):
 
         await ctx.reply(message[start:end])
         start = end + 1  # Move start to the next character after the split
+
+async def send_image(ctx, file_name):
+    """Sends an image from a path."""
+    await ctx.reply(file=discord.File(file_name))
 
 async def send_long_messages(ctx, messages, length):
     """Sends a long list of message in chunks, splitting at the nearest space within the length limit."""
@@ -140,7 +144,7 @@ def hi():
     return "SassBot Said Hi!"
     
 def execute_code(code_string: str):
-    """Executes Python code from a string and captures the output. Do not use this to run interactive code to the user, it will not work. Only use this for calculations.
+    """Executes Python code from a string and captures the output. Only supports Python.
 
     Args:
         code_string: The string containing the Python code to execute.
@@ -156,8 +160,6 @@ def execute_code(code_string: str):
     loop = asyncio.get_event_loop()
     
     encoded_string = code_string.encode().decode('unicode_escape')
-    
-    logging.info('Going to run:\n' + encoded_string)
 
     # Redirect stdout and stderr to capture output
     old_stdout = sys.stdout

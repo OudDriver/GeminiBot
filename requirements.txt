@@ -13,7 +13,6 @@ xmltodict
 requests
 duckduckgo-search
 matplotlib
-resampy
 numpy
 librosa
 discord-ext-voice-recv

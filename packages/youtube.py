@@ -34,7 +34,7 @@ async def handle_youtube(link, client: genai.Client):
         uploaded_files = []
         
         file_names.extend([video_file])
-        uploaded_youtube_file = await asyncio.to_thread(client.files.upload, path=video_file)
+        uploaded_youtube_file = await asyncio.to_thread(client.files.upload, file=video_file)
         uploaded_files.append(uploaded_youtube_file)
         
         logging.info(f"Uploaded {uploaded_youtube_file.display_name} as {uploaded_youtube_file.name}")

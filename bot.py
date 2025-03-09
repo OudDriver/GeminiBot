@@ -67,7 +67,7 @@ client = commands.Bot(command_prefix='!', intents=intents)
 
 # Configure logging to file and console
 logging.basicConfig(level=logging.INFO,  # Set default logging level
-                    format='%(asctime)s - %(levelname)s - %(message)s',  # Time - Level Name - message
+                    format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',  # Time - Level Name - File:Line - message
                     handlers=[  # Add handlers
                         logging.FileHandler("bot.log", encoding='utf-8'),  # Log to file
                         logging.StreamHandler()  # Log to console

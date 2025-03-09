@@ -1,6 +1,6 @@
 import ssl
 import json
-import datetime
+from datetime import datetime, timedelta, timezone
 import traceback
 import os
 import re
@@ -8,10 +8,11 @@ import asyncio
 import logging
 import discord
 from discord.ext import commands
-from google.genai.types import GenerateContentConfig, SafetySetting, Part, FunctionResponse, AutomaticFunctionCallingConfig
+from google.genai.types import GenerateContentConfig, SafetySetting, Part, AutomaticFunctionCallingConfig, HarmCategory, \
+    HarmBlockThreshold, HarmProbability, FinishReason
 from google.genai import Client
 
-from packages.utils import clean_text, create_grounding_markdown, send_long_messages, send_long_message, format_args, send_image, generate_unique_file_name
+from packages.utils import clean_text, create_grounding_markdown, send_long_messages, send_long_message, send_image, generate_unique_file_name
 from packages.youtube import handle_youtube
 from packages.tex import render_latex, split_tex, check_tex
 from packages.uwu import Uwuifier
@@ -30,17 +31,33 @@ thought = ""
 secrets = ""
 output = ""
 ctx_glob = None
-memory = None
+memory = []
 
 BLOCKED_SETTINGS = {
-    "BLOCK_LOW_AND_ABOVE": ['LOW', 'MEDIUM', 'HIGH'],
-    'BLOCK_MEDIUM_AND_ABOVE': ['MEDIUM', 'HIGH'],
-    'BLOCK_ONLY_HIGH': ['HIGH']
+    "BLOCK_LOW_AND_ABOVE": HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+    'BLOCK_MEDIUM_AND_ABOVE': HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+    'BLOCK_ONLY_HIGH': HarmBlockThreshold.BLOCK_ONLY_HIGH,
+    'BLOCK_NONE': HarmBlockThreshold.BLOCK_NONE
+}
+
+BLOCKED_CATEGORY = {
+    'BLOCK_LOW_AND_ABOVE': [HarmProbability.LOW, HarmProbability.MEDIUM, HarmProbability.HIGH],
+    'BLOCK_MEDIUM_AND_ABOVE': [HarmProbability.MEDIUM, HarmProbability.HIGH],
+    'BLOCK_ONLY_HIGH': [HarmProbability.HIGH],
+    'BLOCK_NONE': [HarmProbability.HIGH]
+}
+
+HARM_PRETTY_NAME = {
+    'HARM_CATEGORY_SEXUALLY_EXPLICIT': "Sexually Explicit",
+    'HARM_CATEGORY_HATE_SPEECH': 'Hate Speech',
+    'HARM_CATEGORY_HARASSMENT': 'Harassment',
+    'HARM_CATEGORY_DANGEROUS_CONTENT': 'Dangerous Content',
+    'HARM_CATEGORY_CIVIC_INTEGRITY': 'Civil Integrity'
 }
 
 def prompt(tools: list , genai_client: Client):
     @commands.hybrid_command(name="prompt")
-    async def command(ctx: commands.Context, *, message: str):
+    async def command(ctx: commands.Context, *, message: str = ""):
         """
         Generates a response. Supports file inputs and YouTube links.
 
@@ -50,6 +67,11 @@ def prompt(tools: list , genai_client: Client):
         """
         global ctx_glob, thought, output, memory, secrets, latest_token_count
         try:
+            if message == "": return await ctx.send('You didn\'t give me any prompt!')
+
+            now = datetime.now(timezone.utc)
+            formatted_time = now.strftime("%A, %B %d, %Y %H:%M:%S UTC")
+
             # Load configuration from temporary JSON file
             with open("temp/temp_config.json", "r") as TEMP_CONFIG:
                 configs = json.load(TEMP_CONFIG)
@@ -58,24 +80,20 @@ def prompt(tools: list , genai_client: Client):
             # Initialize model and configs
             model = configs['model']
             safety_settings = [
-                SafetySetting(category="HARM_CATEGORY_CIVIC_INTEGRITY", threshold=SAFETY_SETTING),
-                SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold=SAFETY_SETTING),
-                SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold=SAFETY_SETTING),
-                SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold=SAFETY_SETTING),
-                SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold=SAFETY_SETTING)
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY, threshold=SAFETY_SETTING),
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=SAFETY_SETTING),
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=SAFETY_SETTING),
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=SAFETY_SETTING),
+                SafetySetting(category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=SAFETY_SETTING)
             ]
 
-            config = GenerateContentConfig(system_instruction=configs['system_prompt'], tools=tools, safety_settings=safety_settings, automatic_function_calling=AutomaticFunctionCallingConfig(disable=True))
-
-            # Start a new chat or resume from existing memory
-            chat = genai_client.aio.chats.create(history=memory, model=model, config=config) if memory else genai_client.aio.chats.create(model=model, config=config)
-            ctx_glob = ctx
+            config = GenerateContentConfig(system_instruction=configs['system_prompt'], tools=tools, safety_settings=safety_settings, automatic_function_calling=AutomaticFunctionCallingConfig(maximum_remote_calls=5))
 
             async with ctx.typing():
                 # Clear context if message is {clear}
                 if message.lower() == "{clear}":
                     if ctx.author.guild_permissions.administrator:
-                        memory = []
+                        memory.clear()
                         await ctx.reply("Alright, I have cleared my context. What are we gonna talk about?")
                         logging.info("Cleared Context")
                         return
@@ -86,10 +104,15 @@ def prompt(tools: list , genai_client: Client):
                 # Check for bad words and handle accordingly
                 for word in CONFIG["BadWords"]:
                     if word in ctx.message.content.lower():
+                        logging.info("Contained Blocked Word " + word)
                         await ctx.message.delete()
-                        await ctx.author.timeout(datetime.timedelta(minutes=10), reason="Saying a blocked word.")
+                        await ctx.author.timeout(timedelta(minutes=10), reason="Saying a blocked word.")
                         await ctx.send(f"Chill <@{ctx.author.id}>! Don't say things like that.")
                         return
+
+                # Start a new chat or resume from existing memory
+                chat = genai_client.aio.chats.create(history=memory, model=model, config=config) if memory else genai_client.aio.chats.create(model=model, config=config)
+                ctx_glob = ctx
 
                 logging.info(f"Received Input With Prompt: {message}")
 
@@ -111,9 +134,12 @@ def prompt(tools: list , genai_client: Client):
                 tasks = [handle_attachment(attachment, genai_client) for attachment in ctx.message.attachments if not tools == "google_search_retrieval"]
                 results = await asyncio.gather(*tasks)
 
-                for result in results:
-                    file_names.extend(result[0])
-                    uploaded_files.extend(result[1])
+                if ctx.message.attachments and not hasattr(results[0], "__getitem__"):
+                    await send_long_message(ctx, f"Error: Failed to upload attachment(s). Continuing as if the files are not uploaded. `{results[0]}`", MAX_MESSAGE_LENGTH)
+                else:
+                    for result in results:
+                        file_names.extend(result[0])
+                        uploaded_files.extend(result[1])
 
                 # Waits until the file is active
                 if uploaded_files:
@@ -126,10 +152,10 @@ def prompt(tools: list , genai_client: Client):
                 if ctx.message.reference:
                     replied = await ctx.channel.fetch_message(ctx.message.reference.message_id)
                     final_prompt.insert(0,
-                                        f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id} Replied To \"{replied.content}\": ")
+                                        f"{formatted_time}, {ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id} Replied To \"{replied.content}\": ")
                 else:
                     final_prompt.insert(0,
-                                        f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id}: ")
+                                        f"{formatted_time}, {ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id}: ")
 
                 if not memory:
                     mem = load_memory()
@@ -140,63 +166,19 @@ def prompt(tools: list , genai_client: Client):
 
                 response = await chat.send_message(final_prompt)
 
-                if response.candidates[0].finish_reason == "SAFETY":
+                if response.candidates[0].finish_reason == FinishReason.SAFETY:
                     blocked_category = []
                     for safety in response.candidates[0].safety_ratings:
-                        if safety.probability in BLOCKED_SETTINGS[SAFETY_SETTING]:
-                            blocked_category.append(safety.category)
+                        if safety.probability in BLOCKED_CATEGORY[SAFETY_SETTING]:
+                            blocked_category.append(HARM_PRETTY_NAME[safety.category.name])
 
                     # noinspection PyTypeChecker
-                    await ctx.reply(f"This response was blocked due to safety concerns, {''.join(blocked_category)}", ephemeral=True)
-                    logging.warning(f"Response blocked due to safety: {response.candidates[0].safety_ratings}")
+                    await ctx.reply(f"This response was blocked due to {', '.join(blocked_category)}", ephemeral=True)
+                    logging.warning(f"Response blocked due to safety: {blocked_category}")
                     return
 
-                func_call_result = {}
-                function_call = False
-
-                # Loops until there is no more function calling left.
-                while True:
-                    # Manual function calling system
-                    for part in response.candidates[0].content.parts:
-                        if fn := part.function_call:
-                            function_call = True
-
-                            args = format_args(fn.args)
-
-                            # Joins the arguments
-                            arg_output = ", ".join(f"{key}={val}" for key, val in args.items())
-                            logging.info(f"{fn.name}({arg_output})")
-
-                            # Finds the function
-                            func = None
-                            for f in tools:
-                                if f.__name__ == fn.name:
-                                    func = f
-                                    break
-
-                            # Calls the function
-                            result = func(**args)
-                            func_call_result[fn.name] = result
-
-                    if function_call:
-                        # Adds the function calling output
-                        # noinspection PyTypeChecker
-                        response_parts = [
-                            Part(
-                                function_response=FunctionResponse(name=fn, response={"result": val})) for
-                            fn, val in func_call_result.items()
-                        ]
-                        logging.info(f"Sending {response_parts}")
-                        response = await chat.send_message(response_parts)
-                        function_call = False
-
-                    else:
-                        break
 
                 latest_token_count = response.usage_metadata.total_token_count
-
-                # text = response.text
-                # logging.info(f"Got Response.\n{text}")
 
                 # Check for code execution
                 contains_code_exec = False
@@ -227,6 +209,9 @@ def prompt(tools: list , genai_client: Client):
                     if configs['uwu']:
                         uwu = Uwuifier()
                         text = uwu.uwuify_sentence(text)
+
+                    if response.candidates[0].finish_reason == FinishReason.MAX_TOKENS:
+                        text = text + "\n(Response May Be Cut Off)"
 
                     response_if_tex = split_tex(text)
 

@@ -55,4 +55,4 @@ async def handle_attachment(attachment, client: Client):
         return file_names, uploaded_files
     except Exception as e:
         logging.error(f"Error in handleAttachment: {e}")
-        return [], []  # Return empty lists to indicate failure
+        return e

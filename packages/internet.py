@@ -1,15 +1,11 @@
 import requests
 import httpx
 import wikipedia
-import json
 import logging
 
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 from typing import Any, Dict
-
-with open('config.json') as f:
-    config = json.loads(f.read())
 
 def search_duckduckgo(query: str, max_results: int, get_website_content: bool) -> list[dict[str, str]]:
     """Searches DuckDuckGo for a given query and returns a list of results. All arguments are required.

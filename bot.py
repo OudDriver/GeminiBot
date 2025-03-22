@@ -16,7 +16,7 @@ from commands.usage import usage
 from packages.internet import search_duckduckgo, make_get_request, get_wikipedia_page
 from packages.weather import get_weather
 from packages.wolfram import wolfram_alpha
-from packages.utils import timeout, hi, execute_code
+from packages.utils import execute_code
 from packages.memory_save import save_memory
 
 # Load configuration from config.json
@@ -25,7 +25,7 @@ CONFIG = json.load(open("config.json"))
 # Define system prompts and available tools for the bot
 SYSTEM_PROMPTS = CONFIG["SystemPrompts"]
 TOOLS = {
-    "Default": [get_weather, make_get_request, get_wikipedia_page, wolfram_alpha, hi, timeout, execute_code, search_duckduckgo, save_memory],
+    "Default": [get_weather, make_get_request, get_wikipedia_page, wolfram_alpha, execute_code, search_duckduckgo, save_memory],
     "Google Search": [Tool(google_search=GoogleSearch())],
     "Code Execution": [Tool(code_execution=ToolCodeExecution())]
 }
@@ -80,6 +80,27 @@ async def on_ready():
     logging.info(f'Logged in as {client.user}. Using {model_options[current_model_index]}')
     friendly_name = CONFIG["ModelNames"][model_options[current_model_index]]
     await client.change_presence(activity=discord.CustomActivity(name=f'Hello there! I am using {friendly_name}'))
+
+@client.event
+async def on_message(message):
+    # Ignore messages sent by the bot itself
+    if message.author == client.user:
+        return
+
+    # Get the 'prompt' command function from your module
+    prompt_command = prompt(tools=active_tools, genai_client=genai_client)
+
+    # Invoke the command if the bot is mentioned (or in reply)
+    if client.user in message.mentions or message.reference is not None:
+        ctx = await client.get_context(message) # Get context
+        try:
+            await prompt_command(ctx) # And invoke
+        except Exception as e:
+            logging.exception("Error in on_message event:")
+            await ctx.send(f"An error occurred while processing your request: `{e}`")
+
+    # Process other commands (if you have any)
+    await client.process_commands(message)
 
 @client.hybrid_command(name="uwuify")
 @commands.has_permissions(manage_messages=True)
@@ -179,10 +200,6 @@ async def toggle(ctx: commands.Context, toggles: str):
 
         await ctx.send(f"Switched to toolset: {active_tool_name}")
 
-        # Update the prompt command to use the new active tools
-        client.remove_command('prompt')
-        client.add_command(prompt(active_tools, genai_client))
-
 
 # Command to show the currently used model
 @client.hybrid_command(name="which")
@@ -197,7 +214,6 @@ async def which(ctx: commands.Context):
     await ctx.reply(f"You are using {friendly_name}", ephemeral=True)
 
 # Add available commands to the bot
-client.add_command(prompt(active_tools, genai_client))
 client.add_command(sync)
 client.add_command(thought)
 client.add_command(secret)

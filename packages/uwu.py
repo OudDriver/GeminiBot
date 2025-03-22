@@ -1,5 +1,5 @@
 import logging
-import re
+import regex
 import random
 
 MAX_UINT32 = 0xffffffff
@@ -21,7 +21,7 @@ def is_at(word):
 
 
 def is_uri(word):
-    return re.match(r"^(https?|ftp)://[^\s/$.?#].[^\s]*$", word) is not None
+    return regex.match(r"^(https?|ftp)://[^\s/$.?#].[^\s]*$", word) is not None
 
 
 def is_break(word):
@@ -48,7 +48,7 @@ class Uwuifier:
         exclamations = config.get("exclamations", self.DEFAULTS["EXCLAMATIONS"])
 
         self.faces = [
-            "(・`ω´・)",
+            "(・\\`ω´・)",
             ";;w;;",
             "OwO",
             "UwU",
@@ -79,9 +79,9 @@ class Uwuifier:
             r'\*drops armful of books\*'
         ]  # Thanks bartoneye for some of the actions!
         self.uwu_map = [
-            [re.compile(r"[rl]", re.IGNORECASE), "w"],
-            [re.compile(r"n([aeiou])", re.IGNORECASE), r"ny\1"],
-            [re.compile(r"ove", re.IGNORECASE), "uv"],
+            [regex.compile(r"[rl]", regex.IGNORECASE), "w"],
+            [regex.compile(r"n([aeiou])", regex.IGNORECASE), r"ny\1"],
+            [regex.compile(r"ove", regex.IGNORECASE), "uv"],
         ]
         self._words_modifier = self.DEFAULTS["WORDS"]
         self._spaces_modifier = self.DEFAULTS["SPACES"]
@@ -184,20 +184,17 @@ class Uwuifier:
             return
         if get_capital_percentage(word) > 0.5:
             return
-        if index == 0:
-            word = first_character.lower() + word[1:]
-        else:
+        if index != 0:
             previous_word = words[index - 1]
             previous_word_last_char = previous_word[-1] if previous_word else ""
-            prev_word_ends_with_punctuation = re.search(r"[.!?\\-]", previous_word_last_char)
+            prev_word_ends_with_punctuation = regex.search(r"[.!?\\-]", previous_word_last_char)
             if not prev_word_ends_with_punctuation:
                 return
-            word = first_character.lower() + word[1:]
 
     def uwuify_exclamations(self, sentence):
         """Transforms exclamation points with random variations."""
         words = sentence.split(" ")
-        pattern = re.compile(r"[?!]+$")
+        pattern = regex.compile(r"[?!]+$")
         uwuified_sentence = []
         for word in words:
             seed = Seed(word)

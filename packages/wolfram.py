@@ -1,6 +1,6 @@
 import httpx
 import xmltodict
-import re
+import regex
 from typing import Dict, Any, List
 import json
 import logging
@@ -92,7 +92,7 @@ class WolframAlphaAPI:
         """
         output: Dict[str, str] = {}
         for subpod in subpods:
-            if re.search("steps", subpod['@title']):
+            if regex.search("steps", subpod['@title']):
                 output[subpod['@title']] = subpod.get('plaintext', 'No plain text available') 
             else:
                 # noinspection PyTypeChecker

@@ -37,7 +37,7 @@ def voice(genai_client: Client):
         except discord.ClientException:
             await ctx.send("I am already in a voice channel")
             return
-        except Exception as e:
+        except Exception:
             logging.error(f"Error connecting to voice channel: {traceback.format_exc()}")
             await ctx.send("Failed to join your voice channel.")
             return

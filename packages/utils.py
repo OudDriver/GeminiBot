@@ -9,7 +9,7 @@ import asyncio
 import logging
 import sys
 import io
-import re
+import regex
 import nest_asyncio
 
 from packages.maps import subscript_map, superscript_map
@@ -20,7 +20,7 @@ def generate_unique_file_name(extension: str):
     """
     Generates a unique filename using the current timestamp and a random string.
     """
-    timestamp = int(time.time()) 
+    timestamp = int(time.time())
     random_str = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     return f"{timestamp}_{random_str}.{extension}"
 
@@ -40,15 +40,15 @@ def clean_text(text: str):
     def replace_sup(m):
          return ''.join(superscript_map.get(c, c) for c in m.group(1))
 
-    text = re.sub(r'<sub>(.*?)</sub>', replace_sub, text)
-    text = re.sub(r'<sup>(.*?)</sup>', replace_sup, text)
-    
-    thought_matches = re.findall(r"<thought>[\s\S]*?</thought>", text)
-    secret_matches = re.findall(r"<store>[\s\S]*?</store>", text)
-    text = re.sub(r"<thought>[\s\S]*?</thought>", "", text)
-    text = re.sub(r"<store>[\s\S]*?</store>", "", text)
-    text = re.sub(r"\n<br>", "", text)
-    
+    text = regex.sub(r'<sub>(.*?)</sub>', replace_sub, text)
+    text = regex.sub(r'<sup>(.*?)</sup>', replace_sup, text)
+
+    thought_matches = regex.findall(r"<thought>[\s\S]*?</thought>", text)
+    secret_matches = regex.findall(r"<store>[\s\S]*?</store>", text)
+    text = regex.sub(r"<thought>[\s\S]*?</thought>", "", text)
+    text = regex.sub(r"<store>[\s\S]*?</store>", "", text)
+    text = regex.sub(r"\n<br>", "", text)
+
     return text, thought_matches, secret_matches
 
 async def send_long_message(ctx, message, length):
@@ -74,75 +74,12 @@ async def send_long_messages(ctx, messages, length):
     """Sends a long list of message in chunks, splitting at the nearest space within the length limit."""
     for message in messages:
         if isinstance(message, str):
+            if check_message_empty(message):
+                continue
             await send_long_message(ctx, message, length)
         elif isinstance(message, discord.File):
             await ctx.reply(file=message)
-        
-def timeout(member_id: str, duration: int, reason: str):
-    """Timeouts a Discord member using their ID for a specified duration.
 
-        Args:
-            member_id: The user's ID.
-            duration: Duration in seconds.
-            reason: The reason why the user is timed out.
-    """
-    member_id = int(member_id)
-    logging.info(f"Attempting to time out {member_id}")
-    async def _mute(mem_id: int, dur: int, r: str = None):
-        if dur <= 0:
-            return "Time must be a positive integer"
-        
-        from commands.prompt import ctx_glob
-        
-        guild = ctx_glob.guild
-        try:
-            member = await guild.fetch_member(mem_id)
-            if member is None:
-                await ctx_glob.send("Member not found in this server.")
-                return
-
-            await member.timeout(timedelta(seconds=dur), reason=r)
-            logging.info(f"Member with ID {mem_id} has been timed out for {dur} seconds. Reason: {r}")
-            await ctx_glob.send(f"Member with ID {mem_id} has been timed out for {dur} seconds. Reason: {r}")
-            return f"Successful! Member with ID {mem_id} has been timed out for {dur} seconds. Reason: {r}"
-        except discord.Forbidden:
-            logging.info("Missing Permission!")
-            await ctx_glob.send("Missing Permission!")
-            return f"Missing Permissions. Ping <@{ctx_glob.guild.owner.id}> to fix."
-        except discord.HTTPException as e:
-            logging.info(e)
-            await ctx_glob.send(e)
-            return f"{e}. If it is 404, double check the user ID input, got {member_id}."
-        
-    loop = asyncio.get_running_loop()
-    try:
-        return loop.run_until_complete(_mute(member_id, duration, reason))
-    except RuntimeError as e:
-        logging.error(e)
-
-def send(message: str):
-    async def _send(msg):
-        from commands.prompt import ctx_glob
-        await ctx_glob.send(msg)
-        
-    loop = asyncio.get_running_loop() 
-    loop.run_until_complete(_send(message))
-
-# It's useless now but may not be useless in the near future... Maybe.
-def format_args(args: dict[str: Any]) -> dict[str: Any]:
-    formatted = {}
-    for key, val in args.items():
-        formatted[key] = val
-    return formatted
-
-def hi():
-    """
-    A test function that says hi.
-    """
-    send("SassBot Said Hi!")
-    logging.info("SassBot Said Hi!")
-    return "SassBot Said Hi!"
-    
 def execute_code(code_string: str):
     """Executes Python code from a string and captures the output. Only supports Python.
 
@@ -229,3 +166,20 @@ def create_grounding_markdown(candidates: list[Candidate]):
 
     return markdown_string
 
+def check_message_empty(message: str) -> bool:
+    if not message:
+        return True
+
+    stripped_message = message.strip()
+    if not stripped_message:
+        return True
+
+    if regex.fullmatch(r"[\r\n]+", message):
+        return True
+
+    return False
+
+def repair_links(link: str):
+    if not regex.search(r'^http', link):
+        return "https://" + link
+    return link

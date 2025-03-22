@@ -1,5 +1,3 @@
-from datetime import timedelta
-from typing import Any
 from google.genai.types import Candidate
 import time
 import random
@@ -24,6 +22,12 @@ def generate_unique_file_name(extension: str):
     random_str = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     return f"{timestamp}_{random_str}.{extension}"
 
+def replace_sub(m):
+    return ''.join(subscript_map.get(c, c) for c in m.group(1))
+
+def replace_sup(m):
+     return ''.join(superscript_map.get(c, c) for c in m.group(1))
+
 def clean_text(text: str):
     """
     Replaces <sub></sub> and <sup></sup> tags with their Unicode subscript and superscript equivalents.
@@ -34,11 +38,6 @@ def clean_text(text: str):
     Returns:
         The string with the tags replaced by subscript and superscript characters.
     """
-    def replace_sub(m):
-        return ''.join(subscript_map.get(c, c) for c in m.group(1))
-
-    def replace_sup(m):
-         return ''.join(superscript_map.get(c, c) for c in m.group(1))
 
     text = regex.sub(r'<sub>(.*?)</sub>', replace_sub, text)
     text = regex.sub(r'<sup>(.*?)</sup>', replace_sup, text)
@@ -80,6 +79,10 @@ async def send_long_messages(ctx, messages, length):
         elif isinstance(message, discord.File):
             await ctx.reply(file=message)
 
+async def reply(msg):
+    from commands.prompt import ctx_glob
+    await ctx_glob.reply(msg)
+
 def execute_code(code_string: str):
     """Executes Python code from a string and captures the output. Only supports Python.
 
@@ -89,10 +92,6 @@ def execute_code(code_string: str):
     Returns:
         The standard output or standard error captured during code execution
     """
-    from commands.prompt import ctx_glob
-
-    async def reply(msg):
-        await ctx_glob.reply(msg)
 
     loop = asyncio.get_event_loop()
     

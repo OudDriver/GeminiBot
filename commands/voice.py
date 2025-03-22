@@ -48,12 +48,12 @@ def voice(genai_client: Client):
 async def leave(ctx: commands.Context):
     global voice_client, audio_queue, audio_sink
 
-    if voice_client is None:
-        await ctx.send("I am not in a voice channel.")
-        return
-
     try:
-      await voice_client.disconnect()
+        if voice_client is None:
+            await ctx.send("I am not in a voice channel.")
+            return
+        # noinspection PyUnresolvedReferences
+        await voice_client.disconnect()
     except Exception as e:
         logging.error(f"Error disconnecting from voice channel: {e}")
         await ctx.send("Failed to leave the voice channel.")

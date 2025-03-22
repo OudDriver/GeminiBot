@@ -1,3 +1,5 @@
+from google.genai.types import HarmProbability
+
 superscript_map = {
     "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶",
     "7": "⁷", "8": "⁸", "9": "⁹", "a": "ᵃ", "b": "ᵇ", "c": "ᶜ", "d": "ᵈ",
@@ -21,3 +23,18 @@ subscript_map = {
     "N": "ₙ", "O": "ₒ", "P": "ₚ", "Q": "Q", "R": "ᵣ", "S": "ₛ", "T": "ₜ",
     "U": "ᵤ", "V": "ᵥ", "W": "w", "X": "ₓ", "Y": "ᵧ", "Z": "Z", "+": "₊",
     "-": "₋", "=": "₌", "(": "₍", ")": "₎"}
+
+BLOCKED_CATEGORY = {
+    'BLOCK_LOW_AND_ABOVE': [HarmProbability.LOW, HarmProbability.MEDIUM, HarmProbability.HIGH],
+    'BLOCK_MEDIUM_AND_ABOVE': [HarmProbability.MEDIUM, HarmProbability.HIGH],
+    'BLOCK_ONLY_HIGH': [HarmProbability.HIGH],
+    'BLOCK_NONE': [HarmProbability.HIGH]
+}
+
+HARM_PRETTY_NAME = {
+    'HARM_CATEGORY_SEXUALLY_EXPLICIT': "Sexually Explicit",
+    'HARM_CATEGORY_HATE_SPEECH': 'Hate Speech',
+    'HARM_CATEGORY_HARASSMENT': 'Harassment',
+    'HARM_CATEGORY_DANGEROUS_CONTENT': 'Dangerous Content',
+    'HARM_CATEGORY_CIVIC_INTEGRITY': 'Civil Integrity'
+}

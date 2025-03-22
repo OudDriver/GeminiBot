@@ -8,20 +8,22 @@ import asyncio
 import logging
 import discord
 from discord.ext import commands
-from google.genai.types import GenerateContentConfig, SafetySetting, Part, AutomaticFunctionCallingConfig, HarmCategory, FinishReason, FileData
+from google.genai.types import GenerateContentConfig, SafetySetting, Part,\
+    AutomaticFunctionCallingConfig, HarmCategory, FinishReason, FileData
 from google.genai import Client
 
-from packages.utils import clean_text, create_grounding_markdown, send_long_messages, send_long_message, send_image, \
-    generate_unique_file_name, repair_links
+from packages.utils import clean_text, create_grounding_markdown, send_long_messages, \
+    send_long_message, send_image, generate_unique_file_name, repair_links
 from packages.tex import render_latex, split_tex, check_tex
 from packages.uwu import Uwuifier
 from packages.file_utils import handle_attachment, wait_for_file_active
 from packages.memory_save import load_memory
-from packages.block_map import *
+from packages.maps import BLOCKED_CATEGORY, HARM_PRETTY_NAME
 
 CONFIG = json.load(open("config.json"))
 
-YOUTUBE_PATTERN = regex.compile(r'(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch|v|embed)(?:\.php)?(?:\?.*v=|\/))([a-zA-Z0-9\_-]+)')
+YOUTUBE_PATTERN = regex.compile(r'(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch|v|embed)('
+                                r'?:\.php)?(?:\?.*v=|\/))([a-zA-Z0-9\_-]+)')
 MAX_MESSAGE_LENGTH = 2000
 SAFETY_SETTING = CONFIG["HarmBlockThreshold"]
 
@@ -45,13 +47,13 @@ def prompt(tools: list , genai_client: Client):
             # Check if the bot was mentioned and get the message after the mention
             if ctx.message.reference is None and ctx.message.mentions and ctx.bot.user in ctx.message.mentions:  # Check for mentions
                 # Remove the bot's mention from the message content
-                message = ctx.message.content.replace(f'<@{ctx.bot.user.id}>', '').strip()  #Cleans the mention from the prompt.
+                message = ctx.message.content.replace(f'<@{ctx.bot.user.id}>', '').strip()  # Cleans the mention from the prompt.
                 if message == "":
                     return await ctx.send("You mentioned me, but you didn't give me any prompt!")
 
             elif ctx.message.reference is not None:  #If reference
                 # Remove the bot's mention from the message content
-                message = ctx.message.content.replace(f'<@{ctx.bot.user.id}>', '').strip()  #Cleans the mention from the prompt.
+                message = ctx.message.content.replace(f'<@{ctx.bot.user.id}>', '').strip()  # Cleans the mention from the prompt.
                 if message == "":
                     return await ctx.send("You mentioned me, but you didn't give me any prompt!")
 
@@ -76,9 +78,14 @@ def prompt(tools: list , genai_client: Client):
                 SafetySetting(category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=SAFETY_SETTING)
             ]
 
-            config = GenerateContentConfig(system_instruction=configs['system_prompt'], tools=tools, safety_settings=safety_settings, automatic_function_calling=AutomaticFunctionCallingConfig(maximum_remote_calls=5))
+            config = GenerateContentConfig(
+                system_instruction=configs['system_prompt'],
+                tools=tools,
+                safety_settings=safety_settings,
+                automatic_function_calling=AutomaticFunctionCallingConfig(maximum_remote_calls=5)
+            )
 
-            async with ctx.typing():
+            async with ((ctx.typing())):
                 # Clear context if message is {clear}
                 if message.lower() == "{clear}":
                     if ctx.author.guild_permissions.administrator:
@@ -91,9 +98,14 @@ def prompt(tools: list , genai_client: Client):
                         return
 
                 # Start a new chat or resume from existing memory
-                chat = genai_client.aio.chats.create(history=memory, model=model, config=config) if memory else genai_client.aio.chats.create(model=model, config=config)
-                ctx_glob = ctx
+                if memory:
+                    chat = genai_client.aio.chats.create(
+                        history=memory, model=model, config=config
+                    )
+                else:
+                    genai_client.aio.chats.create(model=model, config=config)
 
+                ctx_glob = ctx
                 logging.info(f"Received Input With Prompt: {message}")
 
                 # Preprocessing and handling attachments/links
@@ -105,7 +117,11 @@ def prompt(tools: list , genai_client: Client):
                 results = await asyncio.gather(*tasks)
 
                 if ctx.message.attachments and not hasattr(results[0], "__getitem__"):
-                    await send_long_message(ctx, f"Error: Failed to upload attachment(s). Continuing as if the files are not uploaded. `{results[0]}`", MAX_MESSAGE_LENGTH)
+                    await send_long_message(
+                        ctx,
+                        f"Error: Failed to upload attachment(s). Continuing as if the files are not uploaded. `{results[0]}`",
+                        MAX_MESSAGE_LENGTH
+                    )
                 else:
                     for result in results:
                         file_names.extend(result[0])
@@ -122,7 +138,8 @@ def prompt(tools: list , genai_client: Client):
                 if ctx.message.reference:
                     replied = await ctx.channel.fetch_message(ctx.message.reference.message_id)
                     final_prompt.insert(0,
-                                        f"{formatted_time}, {ctx.author.name} With Display Name {ctx.author.display_name} and ID {ctx.author.id} Replied To \"{replied.content}\": ")
+                                        (f"{formatted_time}, {ctx.author.name} With Display Name"
+                                         f"{ctx.author.display_name} and ID {ctx.author.id} Replied To \"{replied.content}\": "))
                 else:
                     final_prompt.insert(0,
                                         f"{formatted_time}, {ctx.author.name} With Display Name {ctx.author.display_name} and ID {ctx.author.id}: ")
@@ -153,7 +170,6 @@ def prompt(tools: list , genai_client: Client):
                         if safety.probability in BLOCKED_CATEGORY[SAFETY_SETTING]:
                             blocked_category.append(HARM_PRETTY_NAME[safety.category.name])
 
-                    # noinspection PyTypeChecker
                     await ctx.reply(f"This response was blocked due to {', '.join(blocked_category)}", ephemeral=True)
                     logging.warning(f"Response blocked due to safety: {blocked_category}")
                     return
@@ -225,7 +241,8 @@ def prompt(tools: list , genai_client: Client):
                                                     MAX_MESSAGE_LENGTH)
                         if part.code_execution_result is not None:
                             logging.info(f"Code Execution Output:\n{part.code_execution_result.output}")
-                            await send_long_message(ctx, f"Output:\n```\n{part.code_execution_result.output}\n```",
+                            await send_long_message(ctx,
+                                                    f"Output:\n```\n{part.code_execution_result.output}\n```",
                                                     MAX_MESSAGE_LENGTH)
                         if part.inline_data is not None: # Image
                             logging.info("Got Code Execution Image")
@@ -243,7 +260,9 @@ def prompt(tools: list , genai_client: Client):
                     await handle_text_only_messages()
 
         except ssl.SSLEOFError as e:
-            error_message = f"A secure connection error occurred (SSL connection unexpectedly closed). This may be due to a temporary network problem or an issue with the server. You can try again. If the problem persists, you can wait or you can contact Google. `{e}`."
+            error_message = (f"A secure connection error occurred (SSL connection unexpectedly closed)."
+                             f"This may be due to a temporary network problem or an issue with the server."
+                             f"You can try again. If the problem persists, you can wait or you can contact Google. `{e}`.")
             logging.error(f"Error: {error_message}")
             await send_long_message(ctx, error_message, MAX_MESSAGE_LENGTH)
 

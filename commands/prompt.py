@@ -30,45 +30,46 @@ SAFETY_SETTING = CONFIG["HarmBlockThreshold"]
 latest_token_count = 0
 thought = ""
 secrets = ""
-output = ""
 ctx_glob = None
 memory = []
 
 def prompt(tools: list , genai_client: Client):
-    async def command(ctx: commands.Context): # Message optional, will use the message content if mentioned
+    async def command(ctx: commands.Context): 
         """
         Generates a response. Supports file inputs and YouTube links.
 
         Args:
             ctx: The context of the command invocation
         """
-        global ctx_glob, thought, output, memory, secrets, latest_token_count
+        global ctx_glob, thought, memory, secrets, latest_token_count
         try:
-            # Check if the bot was mentioned and get the message after the mention
-            if ctx.message.reference is None and ctx.message.mentions and ctx.bot.user in ctx.message.mentions:  # Check for mentions
-                # Remove the bot's mention from the message content
-                message = ctx.message.content.replace(f'<@{ctx.bot.user.id}>', '').strip()  # Cleans the mention from the prompt.
-                if message == "":
-                    return await ctx.send("You mentioned me, but you didn't give me any prompt!")
+            is_reply_to_bot = False
+            if ctx.message.reference:
+                try:
+                    replied_message = await ctx.fetch_message(ctx.message.reference.message_id)
+                    is_reply_to_bot = replied_message.author.id == ctx.bot.user.id
+                except discord.NotFound:
+                    logging.warning(f"Referenced message not found (ID: {ctx.message.reference.message_id}).")
+                except discord.HTTPException as e:
+                    logging.error(f"HTTP Error fetching referenced message: {e}")
+                    await ctx.send(f"Error fetching referenced message: {e}")
+                    return
 
-            elif ctx.message.reference is not None:  #If reference
-                # Remove the bot's mention from the message content
-                message = ctx.message.content.replace(f'<@{ctx.bot.user.id}>', '').strip()  # Cleans the mention from the prompt.
-                if message == "":
-                    return await ctx.send("You mentioned me, but you didn't give me any prompt!")
+            is_mention = ctx.message.mentions and ctx.bot.user in ctx.message.mentions
 
-            else:
-                return # Ignore the command if the bot wasn't mentioned.
+            if not (is_reply_to_bot or is_mention):
+                return
+
+            message = ctx.message.content.replace(f'<@{ctx.bot.user.id}>', '').strip()
+            if not message:
+                return await ctx.send("You mentioned me or replied to me, but you didn't give me any prompt!")
 
             now = datetime.now(timezone.utc)
             formatted_time = now.strftime("%A, %B %d, %Y %H:%M:%S UTC")
-
-            # Load configuration from temporary JSON file
+            
             with open("temp/temp_config.json", "r") as TEMP_CONFIG:
                 configs = json.load(TEMP_CONFIG)
-
-
-            # Initialize model and configs
+            
             model = configs['model']
             safety_settings = [
                 SafetySetting(category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY, threshold=SAFETY_SETTING),
@@ -86,7 +87,6 @@ def prompt(tools: list , genai_client: Client):
             )
 
             async with ((ctx.typing())):
-                # Clear context if message is {clear}
                 if message.lower() == "{clear}":
                     if ctx.author.guild_permissions.administrator:
                         memory.clear()
@@ -96,19 +96,17 @@ def prompt(tools: list , genai_client: Client):
                     else:
                         await ctx.reply("You don't have the necessary permissions for this!", ephemeral=True)
                         return
-
-                # Start a new chat or resume from existing memory
+                
                 if memory:
                     chat = genai_client.aio.chats.create(
                         history=memory, model=model, config=config
                     )
                 else:
-                    genai_client.aio.chats.create(model=model, config=config)
+                    chat = genai_client.aio.chats.create(model=model, config=config)
 
                 ctx_glob = ctx
                 logging.info(f"Received Input With Prompt: {message}")
-
-                # Preprocessing and handling attachments/links
+                
                 final_prompt = [YOUTUBE_PATTERN.sub("", message)]
                 file_names = []
                 uploaded_files = []
@@ -127,19 +125,19 @@ def prompt(tools: list , genai_client: Client):
                         file_names.extend(result[0])
                         uploaded_files.extend(result[1])
 
-                # Waits until the file is active
+                
                 if uploaded_files:
                     for uploaded_file in uploaded_files:
                         await wait_for_file_active(uploaded_file)
                         logging.info(f"{uploaded_file.name} is active at server")
                         final_prompt.append(Part.from_uri(file_uri=uploaded_file.uri, mime_type=uploaded_file.mime_type))
 
-                # Added context, such as the reply and the  user
+                
                 if ctx.message.reference:
                     replied = await ctx.channel.fetch_message(ctx.message.reference.message_id)
                     final_prompt.insert(0,
-                                        (f"{formatted_time}, {ctx.author.name} With Display Name"
-                                         f"{ctx.author.display_name} and ID {ctx.author.id} Replied To \"{replied.content}\": "))
+                                        (f"{formatted_time}, {ctx.author.name} With Display Name "
+                                         f"{ctx.author.display_name} and ID {ctx.author.id} Replied to your message, \"{replied.content}\": "))
                 else:
                     final_prompt.insert(0,
                                         f"{formatted_time}, {ctx.author.name} With Display Name {ctx.author.display_name} and ID {ctx.author.id}: ")
@@ -150,7 +148,7 @@ def prompt(tools: list , genai_client: Client):
                         final_prompt.insert(0, f"This is the memory you saved: {mem}")
 
                 links = regex.finditer(YOUTUBE_PATTERN, message)
-                # Process YouTube links
+                
                 if links:
                     for link in links:
                         for i, final in enumerate(final_prompt):
@@ -177,7 +175,6 @@ def prompt(tools: list , genai_client: Client):
 
                 latest_token_count = response.usage_metadata.total_token_count
 
-                # Check for code execution
                 contains_code_exec = False
                 for part in response.candidates[0].content.parts:
                     if part.executable_code is not None or part.code_execution_result is not None or part.inline_data is not None:
@@ -244,7 +241,7 @@ def prompt(tools: list , genai_client: Client):
                             await send_long_message(ctx,
                                                     f"Output:\n```\n{part.code_execution_result.output}\n```",
                                                     MAX_MESSAGE_LENGTH)
-                        if part.inline_data is not None: # Image
+                        if part.inline_data is not None: 
                             logging.info("Got Code Execution Image")
                             file_name = './temp/' + generate_unique_file_name("png")
                             try:

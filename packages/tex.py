@@ -30,34 +30,24 @@ def render_latex(latex_string: str, preamble: str=r'\usepackage{amsmath}', paddi
     try:
         latex_string = sanitize_latex(latex_string)
 
-        # Set up LaTeX text rendering in matplotlib
         rcParams['text.usetex'] = True
         rcParams['text.latex.preamble'] = preamble
         rcParams['font.size'] = font_size
 
-        # Initial small figure to calculate text bounding box
         fig = plt.figure(figsize=(1, 1), dpi=1)
         text = fig.text(0, 0, latex_string, color=text_color)
-        fig.canvas.draw()  # Render the figure to get accurate text size
-        # noinspection PyUnresolvedReferences
+        fig.canvas.draw()  
+        
         bbox = text.get_window_extent(fig.canvas.get_renderer())
-
-        # Close the initial figure
         plt.close(fig)
-
-        # Set padding in inches
-        padding_inches = padding / dpi  # Convert padding from pixels to inches
-
-        # Redefine figure with proper padding and save it
+        padding_inches = padding / dpi
         fig, ax = plt.subplots(figsize=(bbox.width / dpi + 2 * padding_inches,
                                         bbox.height / dpi + 2 * padding_inches), dpi=dpi)
         fig.patch.set_facecolor(background_color)
         ax.text(0.5, 0.5, latex_string, color=text_color, ha='center', va='center', fontsize=font_size)
-        ax.set_axis_off()  # Hide axes
-
+        ax.set_axis_off()
         file_name = fr".\temp\{generate_unique_file_name(r'png')}"
-
-        # Save the figure with specified settings and padding
+        
         fig.savefig(
             file_name,
             dpi=dpi,
@@ -70,14 +60,11 @@ def render_latex(latex_string: str, preamble: str=r'\usepackage{amsmath}', paddi
         plt.close(fig)
 
         return file_name
-
     except RuntimeError as e:
-        # Syntax error at the latex expression
         logging.error(f"LaTeX rendering error! {e}")
         return None
 
 def split_tex(input_str: str) -> list:
-    # Pattern to split the text, keeping the content within dollar signs
     return regex.split(r'(<tex>.*?</tex>)', input_str)
 
 def check_tex(input_str: str) -> bool:

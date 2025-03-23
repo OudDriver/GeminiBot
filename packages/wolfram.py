@@ -95,7 +95,6 @@ class WolframAlphaAPI:
             if regex.search("steps", subpod['@title']):
                 output[subpod['@title']] = subpod.get('plaintext', 'No plain text available') 
             else:
-                # noinspection PyTypeChecker
                 output.setdefault(pod_title, []).append(subpod['plaintext'])
         
         return output
@@ -115,7 +114,6 @@ class WolframAlphaAPI:
         
         output: Dict[str, Any] = {}
 
-        # Check if 'pod' is a list or a dictionary
         for pod in dirty_input['pod'] if isinstance(dirty_input['pod'], list) else [dirty_input['pod']]:
             subpod_data = pod['subpod']
             if isinstance(subpod_data, list):

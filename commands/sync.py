@@ -14,7 +14,6 @@ async def sync(ctx: commands.Context):
     """
     if str(ctx.author.id) == str(config['OwnerID']):
         await ctx.reply(f'Syncing...', ephemeral=True)
-        # noinspection PyUnresolvedReferences
         synced = await ctx.bot.tree.sync()
         synced_commands = ""
         for command in synced:

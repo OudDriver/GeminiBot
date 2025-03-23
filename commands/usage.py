@@ -9,6 +9,6 @@ async def usage(ctx: commands.Context):
         ctx: The context of the command invocation
     """
     from commands.prompt import latest_token_count
-    await ctx.send(f"Total Token Count: {latest_token_count}")
+    await ctx.send(f"Total Token Count: {latest_token_count}", ephemeral=True)
 
 

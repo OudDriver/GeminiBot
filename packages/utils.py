@@ -54,16 +54,14 @@ async def send_long_message(ctx, message, length):
     """Sends a long message in chunks, splitting at the nearest space within the length limit."""
     start = 0
     while start < len(message):
-        end = min(start + length, len(message))  # Initial end position
-
-        # Find the last space within the length limit
+        end = min(start + length, len(message))
         if end < len(message):
             last_space = message.rfind(' ', start, end)
             if last_space != -1:
-                end = last_space  # Split at the last space
+                end = last_space  
 
         await ctx.reply(message[start:end])
-        start = end + 1  # Move start to the next character after the split
+        start = end + 1  
 
 async def send_image(ctx, file_name):
     """Sends an image from a path."""
@@ -96,21 +94,17 @@ def execute_code(code_string: str):
     loop = asyncio.get_event_loop()
     
     encoded_string = code_string.encode().decode('unicode_escape')
-
-    # Redirect stdout and stderr to capture output
+    
     old_stdout = sys.stdout
     old_stderr = sys.stderr
     sys.stdout = captured_stdout = io.StringIO()
     sys.stderr = captured_stderr = io.StringIO()
 
-    # Use provided global_namespace or create a new one
     global_namespace = {}
 
     try:
-        # Execute the code in the custom global namespace
         exec(encoded_string, global_namespace)
     except Exception as e:
-        # Capture the error message
         captured_stderr.write(f"{e}")
         final = f"Code:\n```py\n{encoded_string}\n```\nError:\n```{captured_stderr.getvalue()}```"
         
@@ -123,7 +117,6 @@ def execute_code(code_string: str):
         
         return captured_stderr.getvalue()
     finally:
-        # Restore stdout and stderr
         sys.stdout = old_stdout
         sys.stderr = old_stderr
 

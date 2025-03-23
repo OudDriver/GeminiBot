@@ -3,7 +3,7 @@ import logging
 
 def save_memory(msg: str):
     """
-    Saves a memory into a file
+    Saves a memory. Use this as much as you need.
 
     Args:
         msg: The message to save

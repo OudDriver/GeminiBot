@@ -7,7 +7,7 @@ MAX_UINT32 = 0xffffffff
 class Seed:
     def __init__(self, seed):
         self.seed = hash(seed) & MAX_UINT32
-        self.rng = random.Random(self.seed)  # Use Python's random module
+        self.rng = random.Random(self.seed)  
 
     def random(self):
         return self.rng.random()

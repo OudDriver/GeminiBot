@@ -9,7 +9,7 @@ from packages.internet import search_duckduckgo, make_get_request, get_wikipedia
 from packages.weather import get_weather
 from packages.wolfram import wolfram_alpha
 from packages.utils import execute_code
-from packages.memory_save import save_memory
+from packages.memory import save_memory
 
 def load_config():
     """Loads the configuration from config.json."""
@@ -83,13 +83,13 @@ def get_initial_state(config):
                 os.makedirs("./temp")
 
             with open(temp_config_path, "w") as f:
-                json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status}, f)
+                json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status, "thought": "", "secret": []}, f)
     else:
         if not os.path.isdir("./temp"):
             os.makedirs("./temp")
 
         with open(temp_config_path, "w") as f:
-            json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status}, f)
+            json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status, "thought": "", "secret": []}, f)
 
 
     return {
@@ -105,8 +105,3 @@ def get_initial_state(config):
         "active_tools_index": active_tools_index
     }
 
-def save_temp_config(model, system_prompt_data, current_uwu_status):
-    """Saves the current configuration to temp_config.json."""
-    temp_config_path = "temp/temp_config.json"
-    with open(temp_config_path, "w") as f:
-        json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status}, f)

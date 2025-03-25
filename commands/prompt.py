@@ -9,15 +9,16 @@ import logging
 import discord
 from discord.ext import commands
 from google.genai.types import GenerateContentConfig, SafetySetting, Part,\
-    AutomaticFunctionCallingConfig, HarmCategory, FinishReason, FileData
+    AutomaticFunctionCallingConfig, HarmCategory, FinishReason, FileData, \
+    Tool
 from google.genai import Client
 
 from packages.utils import clean_text, create_grounding_markdown, send_long_messages, \
-    send_long_message, send_image, generate_unique_file_name, repair_links
+    send_long_message, send_image, generate_unique_file_name, repair_links, save_temp_config
 from packages.tex import render_latex, split_tex, check_tex
 from packages.uwu import Uwuifier
 from packages.file_utils import handle_attachment, wait_for_file_active
-from packages.memory_save import load_memory
+from packages.memory import load_memory
 from packages.maps import BLOCKED_CATEGORY, HARM_PRETTY_NAME
 
 CONFIG = json.load(open("config.json"))
@@ -28,12 +29,10 @@ MAX_MESSAGE_LENGTH = 2000
 SAFETY_SETTING = CONFIG["HarmBlockThreshold"]
 
 latest_token_count = 0
-thought = ""
-secrets = ""
 ctx_glob = None
 memory = []
 
-def prompt(tools: list , genai_client: Client):
+def prompt(tools: list[Tool], genai_client: Client):
     async def command(ctx: commands.Context): 
         """
         Generates a response. Supports file inputs and YouTube links.
@@ -41,7 +40,7 @@ def prompt(tools: list , genai_client: Client):
         Args:
             ctx: The context of the command invocation
         """
-        global ctx_glob, thought, memory, secrets, latest_token_count
+        global ctx_glob, memory, latest_token_count
         try:
             is_reply_to_bot = False
             if ctx.message.reference:
@@ -162,6 +161,8 @@ def prompt(tools: list , genai_client: Client):
 
                 response = await chat.send_message(final_prompt)
 
+                logging.info(f"Received Initial Message {response.text}")
+
                 if response.candidates[0].finish_reason == FinishReason.SAFETY:
                     blocked_category = []
                     for safety in response.candidates[0].safety_ratings:
@@ -184,20 +185,19 @@ def prompt(tools: list , genai_client: Client):
                 memory = chat._curated_history
 
                 async def handle_text_only_messages():
-                    global thought, secrets
-                    text, thought_matches, secret_matches = clean_text(part.text)
-                    thought = ""
-                    secrets = ""
+                    text, thought_matches, secret_matches = clean_text(response.text)
                     if thought_matches:
-                        for thought_match in thought_matches:
-                            thought += f"{thought_match}\n"
+                        save_temp_config(thought=thought_matches)
                         text += "\n(This reply have a thought)"
 
                     if secret_matches:
-                        for secret_match in secret_matches:
-                            secrets += f"{secret_match}\n"
+                        save_temp_config(secret=secret_matches)
 
-                    if tools == "google_search_retrieval":
+                    google_search = any(
+                        not callable(tool) and tool.google_search for tool in tools
+                    )
+
+                    if google_search:
                         text = text + f"\n{create_grounding_markdown(response.candidates)}"
 
                     if configs['uwu']:
@@ -224,7 +224,7 @@ def prompt(tools: list , genai_client: Client):
                     else:
                         await send_long_message(ctx, text, MAX_MESSAGE_LENGTH)
 
-                    logging.info(f"Sent\nText:\n{text}\nThought:\n{thought}\nSecrets:\n{secrets}")
+                    logging.info(f"Sent\nText:\n{text}\nThought:\n{thought_matches}\nSecrets:\n{secret_matches}")
 
                 if contains_code_exec:
                     for part in response.candidates[0].content.parts:

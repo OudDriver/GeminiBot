@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from bot.setup import save_temp_config
+from packages.utils import save_temp_config
 import logging
 
 def setup_toggle_command(client, initial_state, config):  
@@ -19,7 +19,6 @@ def setup_toggle_command(client, initial_state, config):
         """Toggles something for the bot."""
 
         if toggles == 'sys':
-            
             initial_state["current_model_index"] = (initial_state["current_model_index"] + 1) % len(model_options)
             initial_state["model"] = model_options[initial_state["current_model_index"]]
 
@@ -32,7 +31,6 @@ def setup_toggle_command(client, initial_state, config):
             await ctx.send(f"Using {system_prompt_name}.")
 
         elif toggles == "model":
-            
             initial_state["current_model_index"] = (initial_state["current_model_index"] + 1) % len(model_options)
             initial_state["model"] = model_options[initial_state["current_model_index"]]
 
@@ -43,7 +41,6 @@ def setup_toggle_command(client, initial_state, config):
             await client.change_presence(activity=discord.CustomActivity(name=f'Hello there! I am using {friendly_name}'))
 
         elif toggles == 'tools':
-            
             tools_names = list(tools.keys())
             initial_state["active_tools_index"] = (initial_state["active_tools_index"] + 1) % len(tools_names)
             initial_state["active_tools"] = tools[tools_names[initial_state["active_tools_index"]]]

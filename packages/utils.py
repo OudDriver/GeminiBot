@@ -1,3 +1,4 @@
+import json
 from google.genai.types import Candidate
 import time
 import random
@@ -46,7 +47,6 @@ def clean_text(text: str):
     secret_matches = regex.findall(r"<store>[\s\S]*?</store>", text)
     text = regex.sub(r"<thought>[\s\S]*?</thought>", "", text)
     text = regex.sub(r"<store>[\s\S]*?</store>", "", text)
-    text = regex.sub(r"\n<br>", "", text)
 
     return text, thought_matches, secret_matches
 
@@ -175,3 +175,70 @@ def repair_links(link: str):
     if not regex.search(r'^http', link):
         return "https://" + link
     return link
+
+def save_temp_config(model: str | None=None, system_prompt_data: str | None=None, current_uwu_status: str | None=None, thought: list | None=None, secret: list | None=None):
+    """Saves the current configuration to temp_config.json.
+
+    If an argument is None, uses the existing value from the file (if it exists).
+    For the 'secret' argument, if a value is provided, it appends it to the
+    existing list of secrets (or creates a new list if none exists).
+    """
+
+    temp_config_path = "temp/temp_config.json"
+
+    # Load existing configuration
+    existing_config = read_temp_config()
+
+    # Update configuration, handling 'secret' specially.
+    new_config = {
+        "model": model if model is not None else existing_config.get("model", None),
+        "system_prompt": system_prompt_data if system_prompt_data is not None else existing_config.get("system_prompt", None),
+        "uwu": current_uwu_status if current_uwu_status is not None else existing_config.get("uwu", None),
+        "thought": thought if thought is not None else existing_config.get("thought", None)
+    }
+
+    # Handle 'secret' (append to the list, or create a new list)
+    if secret is not None:
+        existing_secrets = existing_config.get("secret", [])  # Get existing list, default to empty list
+        if isinstance(existing_secrets, list):
+            if isinstance(secret, list):
+                new_config["secret"] = existing_secrets + secret # append the list
+            else:
+                new_config["secret"] = existing_secrets + [secret]  # Append the new secret
+        else:
+            # Handle the case where 'secret' exists but is not a list.
+            #  We'll overwrite it with a new list containing the provided secret.
+            if isinstance(secret, list):
+                 new_config["secret"] = secret
+            else:
+                new_config["secret"] = [secret]
+    else:
+        new_config["secret"] = existing_config.get("secret", None) # keep it as is
+
+    # Save the updated configuration
+    with open(temp_config_path, "w") as f:
+        json.dump(new_config, f)
+
+
+def read_temp_config():
+    """Reads the configuration from temp/temp_config.json.
+
+    Returns:
+        dict: A dictionary containing the configuration, or an empty dictionary
+              if the file doesn't exist or contains invalid JSON.
+    """
+    temp_config_path = "temp/temp_config.json"
+
+    try:
+        with open(temp_config_path, "r") as f:
+            config = json.load(f)
+            return config
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logging.error(e)
+        return {}  # Return an empty dictionary if the file is missing or invalid
+
+def remove_thought_tags(thought: str):
+    thought_pattern = r'<thought>|</thought>'
+    reg = regex.compile(thought_pattern)
+
+    return regex.sub(reg, "", thought)

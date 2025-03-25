@@ -15,15 +15,6 @@ from commands.usage import usage
 
 def main():
     """Main function to run the bot."""
-    temp_config_path = "temp/temp_config.json"
-    try:
-        os.remove(temp_config_path)
-        print("Removed temp_config.json")  
-    except FileNotFoundError:
-        print("temp_config.json not found, no need to remove.")
-    except OSError as e:
-        print(f"Error removing temp_config.json: {e}")
-
     config = load_config()
     setup_logging()
     genai_client = setup_gemini(config['GeminiAPIkey'])

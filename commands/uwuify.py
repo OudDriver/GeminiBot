@@ -1,5 +1,5 @@
 from discord.ext import commands
-from bot.setup import save_temp_config
+from packages.utils import save_temp_config
 import logging
 
 def setup_uwu_command(client, initial_state):  

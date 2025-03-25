@@ -3,7 +3,7 @@ import logging
 
 def save_memory(msg: str):
     """
-    Saves a memory. Use this as much as you need.
+    Saves a memory. Use this as much as you need. E.g., when a user is telling a thing they like or a plan they are going to do.
 
     Args:
         msg: The message to save

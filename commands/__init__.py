@@ -5,6 +5,6 @@ from commands.which import setup_which_command
 
 def register_commands(client, initial_state, config):
     setup_uwu_command(client, initial_state)
-    setup_toggle_command(client, initial_state, config)
+    setup_toggle_command(client, initial_state)
     setup_which_command(client, initial_state, config)
     setup_list_command(client, initial_state)

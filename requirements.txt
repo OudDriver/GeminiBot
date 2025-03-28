@@ -18,3 +18,5 @@ librosa
 discord-ext-voice-recv
 
 regex
+docker
+tqdm

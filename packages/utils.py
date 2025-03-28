@@ -1,4 +1,7 @@
 import json
+import traceback
+import uuid
+
 from google.genai.types import Candidate
 import time
 import random
@@ -6,12 +9,13 @@ import string
 import discord
 import asyncio
 import logging
-import sys
-import io
+import requests
 import regex
 import nest_asyncio
 
 from packages.maps import subscript_map, superscript_map
+import docker
+import docker.errors
 
 nest_asyncio.apply()
 
@@ -77,60 +81,87 @@ async def send_long_messages(ctx, messages, length):
         elif isinstance(message, discord.File):
             await ctx.reply(file=message)
 
-async def reply(msg):
-    from commands.prompt import ctx_glob
-    await ctx_glob.reply(msg)
+def reply(message: str):
+    async def _reply(msg):
+        from commands.prompt import ctx_glob
+        await ctx_glob.reply(msg)
 
-def execute_code(code_string: str):
-    """Executes Python code from a string and captures the output. Only supports Python.
+    loop = asyncio.get_running_loop()
+    loop.run_until_complete(_reply(message))
+
+def execute_code(code_string: str) -> str:
+    """Executes Python code. Times out in 5 seconds.
 
     Args:
-        code_string: The string containing the Python code to execute.
+        code_string: The Python code to execute.
 
     Returns:
-        The standard output or standard error captured during code execution
+        The captured output (stdout and stderr).
     """
-
-    loop = asyncio.get_event_loop()
-    
+    timeout_seconds = 5
     encoded_string = code_string.encode().decode('unicode_escape')
-    
-    old_stdout = sys.stdout
-    old_stderr = sys.stderr
-    sys.stdout = captured_stdout = io.StringIO()
-    sys.stderr = captured_stderr = io.StringIO()
+    client = docker.from_env()
 
-    global_namespace = {}
+    container_name = f"python-sandbox-{uuid.uuid4()}"
 
     try:
-        exec(encoded_string, global_namespace)
+        container = client.containers.run(
+            "python-sandbox-image",
+            command=["python", "-c", code_string],
+            detach=True,
+            mem_limit="128m",
+            cpu_shares=102,
+            name=container_name,
+            network_disabled=True,
+            read_only=True,
+            stdout=True,
+            stderr=True,
+        )
+
+        result = container.wait(timeout=timeout_seconds)
+        exit_code = result.get('StatusCode', -1)  # Default to -1 if key missing
+
+        # Capture output (stdout and stderr)
+        output = container.logs(stdout=True, stderr=True).decode("utf-8", errors="replace")
+
+        if exit_code != 0:
+            # Append error message if the container exited abnormally
+            output += f"\nERROR: Container exited with status code: {exit_code}"
+
+        final = f"Code:\n```py\n{encoded_string}\n```\nOutput:\n```\n{output.strip()}\n```"
+        logging.info(final)
+        reply(final)
+
+        return output.strip()
+
+    except docker.errors.ContainerError as e:
+        logging.error(f"Container Error: {traceback.format_exc()}")
+        reply(f"Container Error: {e}")
+        return f"Container Error: {e}"
+    except docker.errors.ImageNotFound as e:
+        logging.error(f"Image Not Found Error: {traceback.format_exc()}")
+        reply(f"Image Not Found Error: {e}")
+        return f"Image Not Found Error: {e}"
+    except docker.errors.APIError as e:
+        logging.error(f"Docker API Error: {traceback.format_exc()}")
+        reply(f"Docker API Error: {e}")
+        return f"Docker API Error: {e}"
+    except requests.exceptions.ConnectionError as e:
+        log_msg = f"Docker Daemon Connection Error (likely timeout during wait): {traceback.format_exc()}"
+        logging.error(log_msg)
+        reply_msg = f"Error communicating with Docker: {e}. It might be slow or unresponsive or it timed out."
+        reply(reply_msg)
+        return reply_msg
     except Exception as e:
-        captured_stderr.write(f"{e}")
-        final = f"Code:\n```py\n{encoded_string}\n```\nError:\n```{captured_stderr.getvalue()}```"
-        
-        logging.info(captured_stderr.getvalue())
-
-        try:
-            loop.run_until_complete(reply(final))
-        except RuntimeError as e:
-            logging.error(e)
-        
-        return captured_stderr.getvalue()
+        logging.error(f"An unexpected error: {traceback.format_exc()}")
+        reply(f"An unexpected error: {e}")
+        return f"An unexpected error: {e}"
     finally:
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
-
-    captured = captured_stdout.getvalue()
-
-    final = f"Code:\n```py\n{encoded_string}\n```\nOutput:\n```\n{captured}```"
-
-    logging.info(final)
-    try:
-        loop.run_until_complete(reply(final))
-    except RuntimeError as e:
-        logging.error(e)
-
-    return captured
+        try:
+            container = client.containers.get(container_name)
+            container.remove(force=True)  # Make sure it is cleaned up
+        except:
+            pass
 
 def create_grounding_markdown(candidates: list[Candidate]):
     """

@@ -163,6 +163,11 @@ def prompt(tools: list[Tool], genai_client: Client):
 
                 logging.info(f"Received Initial Message {response.text}")
 
+                if response.candidates[0].finish_reason == FinishReason.MALFORMED_FUNCTION_CALL:
+                    logging.error(f"Function call is malformed!")
+                    await ctx.reply("Seems like my function calling tool is malformed. Try again!")
+                    return
+
                 if response.candidates[0].finish_reason == FinishReason.SAFETY:
                     blocked_category = []
                     for safety in response.candidates[0].safety_ratings:

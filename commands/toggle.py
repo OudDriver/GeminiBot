@@ -4,7 +4,7 @@ from discord import app_commands
 from packages.utils import save_temp_config
 import logging
 
-def setup_toggle_command(client, initial_state, config):  
+def setup_toggle_command(client, initial_state):
     model_options = initial_state["model_options"]
     system_prompts = initial_state["system_prompts"]
     tools = initial_state["tools"]
@@ -35,9 +35,9 @@ def setup_toggle_command(client, initial_state, config):
             initial_state["model"] = model_options[initial_state["current_model_index"]]
 
             save_temp_config(initial_state["model"], initial_state["system_prompt_data"], initial_state["current_uwu_status"])
-            friendly_name = config["ModelNames"][initial_state["model"]]
+            friendly_name = initial_state["model_clean_names"][initial_state["model_options"][initial_state["current_model_index"]]]
             logging.info(f"Switched to {friendly_name}")
-            await ctx.send(f"Switched to {friendly_name}")
+            await ctx.send(f"Switched to {friendly_name}.")
             await client.change_presence(activity=discord.CustomActivity(name=f'Hello there! I am using {friendly_name}'))
 
         elif toggles == 'tools':
@@ -45,4 +45,4 @@ def setup_toggle_command(client, initial_state, config):
             initial_state["active_tools_index"] = (initial_state["active_tools_index"] + 1) % len(tools_names)
             initial_state["active_tools"] = tools[tools_names[initial_state["active_tools_index"]]]
             logging.info(f"Switched to toolset {tools_names[initial_state['active_tools_index']]}")
-            await ctx.send(f"Switched to toolset: {tools_names[initial_state['active_tools_index']]}")
+            await ctx.send(f"Switched to toolset: {tools_names[initial_state['active_tools_index']]}.")

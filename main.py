@@ -1,7 +1,6 @@
 
 import discord
 from discord.ext import commands
-import os
 
 from bot.setup import load_config, setup_logging, setup_gemini, get_initial_state
 from bot.events import register_events

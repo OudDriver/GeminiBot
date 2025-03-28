@@ -9,7 +9,7 @@ def register_events(client, initial_state, genai_client):
     @client.event
     async def on_ready():
         logging.info(f'Logged in as {client.user}. Using {initial_state["model_options"][initial_state["current_model_index"]]}')
-        friendly_name = initial_state["model_options"][initial_state["current_model_index"]]
+        friendly_name = initial_state["model_clean_names"][initial_state["model_options"][initial_state["current_model_index"]]]
         await client.change_presence(activity=discord.CustomActivity(name=f'Hello there! I am using {friendly_name}'))
 
     @client.event

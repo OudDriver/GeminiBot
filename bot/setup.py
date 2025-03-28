@@ -45,6 +45,10 @@ def get_initial_state(config):
 
     system_prompts = config["SystemPrompts"]
     model_options = [key for key in config["ModelNames"]]
+    model_clean_names = {}
+
+    for key, value in config["ModelNames"].items():
+        model_clean_names[key] = value
     
     tools = {
         "Default": [get_weather, make_get_request, get_wikipedia_page, wolfram_alpha, execute_code, search_duckduckgo, save_memory],
@@ -61,36 +65,11 @@ def get_initial_state(config):
     tool_names = list(tools.keys())
     active_tools = tools[tool_names[active_tools_index]]
 
-    temp_config_path = "temp/temp_config.json"
-    if os.path.exists(temp_config_path):
-        try:
-            with open(temp_config_path, "r") as f:
-                temp_config = json.load(f)
-                
-                current_model_index = model_options.index(temp_config['model'])
-                model = temp_config["model"]
+    if not os.path.isdir("./temp"):
+        os.makedirs("./temp")
 
-                for i in range(len(system_prompts)):
-                    if system_prompts[i]["SystemPrompt"] == temp_config["system_prompt"]:
-                        current_sys_prompt_index = i
-
-                system_prompt_data = temp_config["system_prompt"]
-                current_uwu_status = temp_config["uwu"]
-        except (FileNotFoundError, json.JSONDecodeError, KeyError, ValueError) as e:
-            logging.warning(f"Error loading temp_config.json: {e}. Using default values.")
-            
-            if not os.path.isdir("./temp"):
-                os.makedirs("./temp")
-
-            with open(temp_config_path, "w") as f:
-                json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status, "thought": "", "secret": []}, f)
-    else:
-        if not os.path.isdir("./temp"):
-            os.makedirs("./temp")
-
-        with open(temp_config_path, "w") as f:
-            json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status, "thought": "", "secret": []}, f)
-
+    with open(temp_config_path, "w") as f:
+        json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status, "thought": "", "secret": []}, f)
 
     return {
         "system_prompts": system_prompts,
@@ -102,6 +81,7 @@ def get_initial_state(config):
         "current_uwu_status": current_uwu_status,
         "tools": tools,
         "active_tools": active_tools,
-        "active_tools_index": active_tools_index
+        "active_tools_index": active_tools_index,
+        "model_clean_names": model_clean_names
     }
 

@@ -28,7 +28,7 @@ BLOCKED_CATEGORY = {
     'BLOCK_LOW_AND_ABOVE': [HarmProbability.LOW, HarmProbability.MEDIUM, HarmProbability.HIGH],
     'BLOCK_MEDIUM_AND_ABOVE': [HarmProbability.MEDIUM, HarmProbability.HIGH],
     'BLOCK_ONLY_HIGH': [HarmProbability.HIGH],
-    'BLOCK_NONE': [HarmProbability.HIGH]
+    'BLOCK_NONE': []
 }
 
 HARM_PRETTY_NAME = {

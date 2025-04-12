@@ -33,6 +33,7 @@ def render_latex(latex_string: str, preamble: str=r'\usepackage{amsmath}', paddi
         rcParams['text.usetex'] = True
         rcParams['text.latex.preamble'] = preamble
         rcParams['font.size'] = font_size
+        rcParams['font.family'] = "Computer Modern Roman"
 
         fig = plt.figure(figsize=(1, 1), dpi=1)
         text = fig.text(0, 0, latex_string, color=text_color)

@@ -22,7 +22,7 @@ def load_memory():
         The loaded memory
     """
     try:
-        with open("memory.txt", "r") as f:
+        with open("memory.txt") as f:
             mem = f.read()
             logging.info(f"Loaded {mem}")
             return mem

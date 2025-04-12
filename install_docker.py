@@ -30,7 +30,7 @@ WORKDIR /home/${USER_NAME}
 USER ${USER_NAME}
 """
 
-def download_file_with_progress(url, local_filename=None, chunk_size=8192):
+def download_file_with_progress(url: str, local_filename: str=None, chunk_size: int=8192):
     """
     Downloads a file from a URL showing a progress bar.
 
@@ -97,7 +97,7 @@ def download_file_with_progress(url, local_filename=None, chunk_size=8192):
     except Exception as e:
         print(f"\nAn unexpected error occurred: {e}")
 
-def run_command(command, shell=False, check=True, capture_output=False):
+def run_command(command: list[str] | str, shell: bool=False, check: bool=True, capture_output: bool=False):
     """Helper function to run subprocess commands with better error reporting."""
     cmd_str = ' '.join(command) if isinstance(command, list) else command
     print(f"Running command: {cmd_str}")
@@ -297,7 +297,7 @@ def install_docker():
                     return False # Indicate failure
 
     except (subprocess.CalledProcessError, FileNotFoundError, Exception) as e:
-        print(f"\n--- An error occurred during the Docker setup process ---", file=sys.stderr)
+        print("\n--- An error occurred during the Docker setup process ---", file=sys.stderr)
         # run_command already prints details for subprocess errors
         if not isinstance(e, (subprocess.CalledProcessError, FileNotFoundError)):
              print(f"Error details: {e}", file=sys.stderr) # Print other exceptions
@@ -332,7 +332,7 @@ def build_docker_image():
         print(f"\nDocker image '{image_name}' built successfully.")
         return True # Indicate success
 
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         print(f"\nError building Docker image '{image_name}'.", file=sys.stderr)
         print("Please check the following:", file=sys.stderr)
         print("1. Is the Docker daemon running?", file=sys.stderr)

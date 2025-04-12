@@ -13,7 +13,7 @@ def search_duckduckgo(query: str, max_results: int, get_website_content: bool) -
     Args:
         query: The search query.
         max_results: The maximum number of results to return.
-        get_website_content: Whether to fetch the content of each website in the search results. Recommended for more details. Set this value to True if needed.
+        get_website_content: Whether to fetch the content of each website in the search results. Recommended for more details.
 
     Returns:
         A list of dictionaries, where each dictionary represents a search result.

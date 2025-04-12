@@ -2,6 +2,8 @@
 import json
 import logging
 import os
+import sys
+
 from google import genai
 from google.genai.types import GoogleSearch, ToolCodeExecution, Tool
 
@@ -13,19 +15,38 @@ from packages.memory import save_memory
 
 def load_config():
     """Loads the configuration from config.json."""
-    with open("config.json", "r") as f:
+    with open("config.json") as f:
         return json.load(f)
 
 def setup_logging():
     """Configures logging to file and console."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
-        handlers=[
-            logging.FileHandler("bot.log", encoding='utf-8'),
-            logging.StreamHandler()
-        ]
-    )
+    # Define log format
+    log_format = '%(asctime)s - %(levelname)s - %(name)s - %(filename)s:%(lineno)d - %(message)s'
+    formatter = logging.Formatter(log_format)
+
+    # Get the root logger
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO) # Set the minimum level for the root logger
+
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+        handler.close()
+    try:
+        file_handler = logging.FileHandler("bot.log", encoding='utf-8')
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(logging.INFO) # Set level for this specific handler
+        logger.addHandler(file_handler)
+    except Exception as e:
+        print(f"Error setting up file logging: {e}") # Basic error print if file handler fails
+
+    # --- Console (Stream) Handler ---
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    stream_handler.setLevel(logging.INFO) # Set level for this specific handler
+    logger.addHandler(stream_handler)
+
+    # Now log the setup message using the configured root logger
+    logging.info("Set up logging.") # Use logging.info which uses the root logger
 
 def setup_gemini(api_key):
     """Configures the Google Gemini API client."""

@@ -14,7 +14,7 @@ requests
 duckduckgo-search
 matplotlib
 numpy
-librosa
+samplerate
 discord-ext-voice-recv
 
 regex

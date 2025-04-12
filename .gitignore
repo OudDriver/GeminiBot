@@ -2,12 +2,15 @@
 *.py[cod]
 *$py.class
 *.so
+.coverage
+htmlcov/
 
 .vscode/
 venv/
 .idea/
 
 bot.log
+memory.txt
 
 temp/
 config.json

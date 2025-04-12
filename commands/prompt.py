@@ -1,218 +1,297 @@
 import ssl
 import json
-import datetime
+from datetime import datetime, timezone
+import traceback
+import os
+import regex
+import asyncio
+import logging
+import discord
 from discord.ext import commands
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google.genai.types import GenerateContentConfig, SafetySetting, Part,\
+    AutomaticFunctionCallingConfig, HarmCategory, FinishReason, FileData, \
+    Tool
+from google.genai import Client
 
-from packages.utils import *
-from packages.youtube import *
-from packages.tex import *
+from bot.setup import load_config
+from packages.utils import clean_text, create_grounding_markdown, send_long_messages, \
+    send_long_message, send_image, generate_unique_file_name, repair_links, save_temp_config
+from packages.tex import render_latex, split_tex, check_tex
+from packages.uwu import Uwuifier
+from packages.file_utils import handle_attachment, wait_for_file_active
+from packages.memory import load_memory
+from packages.maps import BLOCKED_CATEGORY, HARM_PRETTY_NAME
 
-HARM_BLOCK_THRESHOLD = {
-    "BLOCK_LOW_AND_ABOVE": HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
-    "BLOCK_MEDIUM_AND_ABOVE": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-    "BLOCK_ONLY_HIGH": HarmBlockThreshold.BLOCK_ONLY_HIGH,
-    "BLOCK_NONE": HarmBlockThreshold.BLOCK_NONE,
-}
-
-CONFIG = json.load(open("config.json"))
-
-YOUTUBE_PATTERN = re.compile(
-    r'https://(www\.youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]+)(?:\S*[&?]list=[^&]+)?(?:&index=\d+)?')
+YOUTUBE_PATTERN = regex.compile(r'(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch|v|embed)('
+                                r'?:\.php)?(?:\?.*v=|\/))([a-zA-Z0-9\_-]+)')
 MAX_MESSAGE_LENGTH = 2000
-SAFETY_SETTING = HARM_BLOCK_THRESHOLD[CONFIG["HarmBlockThreshold"]]
-SAFETY = {
-    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: SAFETY_SETTING,
-    HarmCategory.HARM_CATEGORY_HARASSMENT: SAFETY_SETTING,
-    HarmCategory.HARM_CATEGORY_HATE_SPEECH: SAFETY_SETTING,
-    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: SAFETY_SETTING
-}
+CONFIG = load_config()
+SAFETY_SETTING = CONFIG["HarmBlockThreshold"]
 
-thought = ""
-secrets = ""
-output = ""
-ctxGlob = None
-memory = None
+latest_token_count = 0
+ctx_glob = None
+memory = []
 
-
-def prompt(tools: list):
-    @commands.hybrid_command(name="prompt")
-    async def command(ctx: commands.Context, *, message: str):
+def prompt(tools: list[Tool], genai_client: Client):
+    async def command(ctx: commands.Context): 
         """
         Generates a response. Supports file inputs and YouTube links.
 
         Args:
             ctx: The context of the command invocation
-            message: The message to send the bot
         """
-        global ctxGlob, thought, output, memory, secrets
+        global ctx_glob, memory, latest_token_count
         try:
-            # Load configuration from temporary JSON file
-            with open("temp/temp_config.json", "r") as TEMP_CONFIG:
+            is_reply_to_bot = False
+            if ctx.message.reference:
+                try:
+                    replied_message = await ctx.fetch_message(ctx.message.reference.message_id)
+                    is_reply_to_bot = replied_message.author.id == ctx.bot.user.id
+                except discord.NotFound:
+                    logging.warning(f"Referenced message not found (ID: {ctx.message.reference.message_id}).")
+                except discord.HTTPException as e:
+                    logging.error(f"HTTP Error fetching referenced message: {e}")
+                    await ctx.send(f"Error fetching referenced message: {e}")
+                    return
+
+            is_mention = ctx.message.mentions and ctx.bot.user in ctx.message.mentions
+
+            if not (is_reply_to_bot or is_mention):
+                return
+
+            message = ctx.message.content.replace(f'<@{ctx.bot.user.id}>', '').strip()
+            if not message:
+                return await ctx.send("You mentioned me or replied to me, but you didn't give me any prompt!")
+
+            now = datetime.now(timezone.utc)
+            formatted_time = now.strftime("%A, %B %d, %Y %H:%M:%S UTC")
+            
+            with open("temp/temp_config.json") as TEMP_CONFIG:
                 configs = json.load(TEMP_CONFIG)
+            
+            model = configs['model']
+            safety_settings = [
+                SafetySetting(
+                    category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+                    threshold=SAFETY_SETTING,
+                ),
+                SafetySetting(
+                    category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                    threshold=SAFETY_SETTING,
+                ),
+                SafetySetting(
+                    category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                    threshold=SAFETY_SETTING,
+                ),
+                SafetySetting(
+                    category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                    threshold=SAFETY_SETTING,
+                ),
+                SafetySetting(
+                    category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                    threshold=SAFETY_SETTING,
+                ),
+            ]
 
-            # Initialize the GenAI model with configuration and safety settings
-            model = genai.GenerativeModel(configs['model'], SAFETY_SETTING, system_instruction=configs['system_prompt'],
-                                          tools=tools)
+            if model == "gemini-2.0-flash-exp-image-generation":
+                response_modalities = ["Text", "Image"]
+                tool_func_call = None
+                auto_func_call = None
+                system_instructions = None
 
-            # Start a new chat or resume from existing memory
-            chat = model.start_chat(history=memory) if memory else model.start_chat()
-            ctxGlob = ctx
+            else:
+                response_modalities = None
+                tool_func_call = tools
+                auto_func_call = AutomaticFunctionCallingConfig(maximum_remote_calls=5)
+                system_instructions = configs['system_prompt']
+
+            config = GenerateContentConfig(
+                system_instruction=system_instructions,
+                tools=tool_func_call,
+                safety_settings=safety_settings,
+                automatic_function_calling=auto_func_call,
+                response_modalities=response_modalities,
+                temperature=0.3
+            )
 
             async with ctx.typing():
-                # Clear context if message is {clear}
                 if message.lower() == "{clear}":
                     if ctx.author.guild_permissions.administrator:
-                        memory = []
+                        memory.clear()
                         await ctx.reply("Alright, I have cleared my context. What are we gonna talk about?")
                         logging.info("Cleared Context")
                         return
                     else:
                         await ctx.reply("You don't have the necessary permissions for this!", ephemeral=True)
-
-                # Check for bad words and handle accordingly
-                for word in CONFIG["BadWords"]:
-                    if word in ctx.message.content.lower():
-                        await ctx.message.delete()
-                        await ctx.author.timeout(datetime.timedelta(minutes=10),
-                                                 reason="Saying a word blocked in config.json")
-                        await ctx.send(f"Chill <@{ctx.author.id}>! Don't say things like that.")
                         return
+                
+                if memory:
+                    chat = genai_client.aio.chats.create(
+                        history=memory, model=model, config=config
+                    )
+                else:
+                    chat = genai_client.aio.chats.create(model=model, config=config)
 
+                ctx_glob = ctx
                 logging.info(f"Received Input With Prompt: {message}")
-
-                # Preprocessing and handling attachments/links
+                
                 final_prompt = [YOUTUBE_PATTERN.sub("", message)]
                 file_names = []
                 uploaded_files = []
 
-                link = YOUTUBE_PATTERN.search(message)
-
-                # Download the files and upload them
-                if link and not tools == "google_search_retrieval":
-                    logging.info(f"Found Link {link}")
-                    file_names_from_func, uploaded_files_from_func = await handle_youtube(link)
-
-                    file_names.extend(file_names_from_func)
-                    uploaded_files.extend(uploaded_files_from_func)
-
-                tasks = [handle_attachment(attachment) for attachment in ctx.message.attachments if not tools == "google_search_retrieval"]
+                tasks = [handle_attachment(attachment, genai_client) for attachment in ctx.message.attachments]
                 results = await asyncio.gather(*tasks)
 
-                for result in results:
-                    file_names.extend(result[0])
-                    uploaded_files.extend(result[1])
+                if ctx.message.attachments and not hasattr(results[0], "__getitem__"):
+                    await send_long_message(
+                        ctx,
+                        f"Error: Failed to upload attachment(s). Continuing as if the files are not uploaded. Error: `{results[0]}`.",
+                        MAX_MESSAGE_LENGTH
+                    )
+                else:
+                    for result in results:
+                        file_names.extend(result[0])
+                        uploaded_files.extend(result[1])
 
-                # Waits until the file is active
+                
                 if uploaded_files:
-                    for uploadedFile in uploaded_files:
-                        await wait_for_file_active(uploadedFile)
-                        logging.info(f"{genai.get_file(uploadedFile.name).display_name} is active at server")
-                        final_prompt.append(uploadedFile)
+                    for uploaded_file in uploaded_files:
+                        await wait_for_file_active(uploaded_file)
+                        logging.info(f"{uploaded_file.name} is active at server")
+                        final_prompt.append(Part.from_uri(file_uri=uploaded_file.uri, mime_type=uploaded_file.mime_type))
 
-                # Added context, such as the reply and the  user
+                
                 if ctx.message.reference:
                     replied = await ctx.channel.fetch_message(ctx.message.reference.message_id)
                     final_prompt.insert(0,
-                                        f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id} Replied To \"{replied.content}\": ")
+                                        (f"{formatted_time}, {ctx.author.name} With Display Name "
+                                         f"{ctx.author.display_name} and ID {ctx.author.id} Replied to your message, \"{replied.content}\": "))
                 else:
                     final_prompt.insert(0,
-                                        f"{ctx.author.name} With Display Name {ctx.author.global_name} and ID {ctx.author.id}: ")
+                                        f"{formatted_time}, {ctx.author.name} With Display Name {ctx.author.display_name} and ID {ctx.author.id}: ")
 
-                if tools == "google_search_retrieval":
-                    final_prompt = final_prompt[0] + final_prompt[1]
+                if not memory:
+                    mem = load_memory()
+                    if mem:
+                        final_prompt.insert(0, f"This is the memory you saved: {mem}")
+
+                links = regex.finditer(YOUTUBE_PATTERN, message)
+                
+                if links:
+                    for link in links:
+                        for i, final in enumerate(final_prompt):
+                            final_prompt[i] = regex.sub(YOUTUBE_PATTERN, "", final)
+                        url = repair_links(link.group())
+                        file = FileData(file_uri=url)
+                        logging.info(f"Found and Processed Link {url}")
+                        final_prompt.append(Part(file_data=file))
+
+                if model == "gemini-2.0-flash-exp-image-generation":
+                    final_prompt = final_prompt[-1]
 
                 logging.info(f"Got Final Prompt {final_prompt}")
 
-                response = chat.send_message(final_prompt, safety_settings=SAFETY)
+                response = await chat.send_message(final_prompt)
 
-                func_call_result = {}
-                function_call = False
+                if response.candidates[0].finish_reason == FinishReason.MALFORMED_FUNCTION_CALL:
+                    logging.error("Function call is malformed!")
+                    await ctx.reply("Seems like my function calling tool is malformed. Try again!")
+                    return
+
+                if response.candidates[0].finish_reason == FinishReason.SAFETY:
+                    blocked_category = []
+                    for safety in response.candidates[0].safety_ratings:
+                        if safety.probability in BLOCKED_CATEGORY[SAFETY_SETTING]:
+                            blocked_category.append(HARM_PRETTY_NAME[safety.category.name])
+
+                    await ctx.reply(f"This response was blocked due to {', '.join(blocked_category)}", ephemeral=True)
+                    logging.warning(f"Response blocked due to safety: {blocked_category}")
+                    return
 
 
-                # Loops until there is no more function calling left.
-                while True:
-                    if isinstance(tools, str):
-                        break
+                latest_token_count = response.usage_metadata.total_token_count
 
-                    # Manual function calling system
-                    for part in response.parts:
-                        if fn := part.function_call:
-                            function_call = True
+                memory = chat._curated_history
 
-                            # Joins the arguments
-                            arg_output = ", ".join(f"{key}={val}" for key, val in fn.args.items())
-                            logging.info(f"{fn.name}({arg_output})")
+                async def handle_text_only_messages(text):
+                    text, thought_matches, secret_matches = clean_text(text)
 
-                            # Finds the function
-                            func = None
-                            for f in tools:
-                                if f.__name__ == fn.name:
-                                    func = f
-                                    break
+                    if configs['uwu']:
+                        uwu = Uwuifier()
+                        text = uwu.uwuify_sentence(text)
 
-                            args = fn.args
+                    if thought_matches:
+                        save_temp_config(thought=thought_matches)
+                        text += "\n(This reply have a thought)"
 
-                            # Calls the function
-                            result = func(**args)
-                            func_call_result[fn.name] = result
+                    if secret_matches:
+                        save_temp_config(secret=secret_matches)
 
-                    if function_call:
-                        # Adds the function calling output
-                        # noinspection PyTypeChecker
-                        response_parts = [
-                            genai.protos.Part(
-                                function_response=genai.protos.FunctionResponse(name=fn, response={"result": val})) for
-                            fn, val in func_call_result.items()
-                        ]
-                        response = chat.send_message(response_parts, safety_settings=SAFETY)
-                        function_call = False
+                    if any(not callable(tool) and tool.google_search for tool in tools):
+                        text = text + f"\n{create_grounding_markdown(response.candidates)}"
 
+                    if response.candidates[0].finish_reason == FinishReason.MAX_TOKENS:
+                        text = text + "\n(Response May Be Cut Off)"
+
+                    response_if_tex = split_tex(text)
+
+                    if len(response_if_tex) > 1:
+                        for j, tex in enumerate(response_if_tex):
+                            if check_tex(tex):
+                                logging.info(tex)
+                                file_tex = render_latex(tex)
+                                if not file_tex:
+                                    response_if_tex[j] += " (Contains Invalid LaTeX Expressions)"
+                                    continue
+                                file_names.append(file_tex)
+                                response_if_tex[j] = discord.File(file_tex)
+
+                        await send_long_messages(
+                            ctx, response_if_tex, MAX_MESSAGE_LENGTH
+                        )
                     else:
-                        break
+                        await send_long_message(ctx, text, MAX_MESSAGE_LENGTH)
 
-                text = response.text
-                logging.info(f"Got Response.\n{text}")
+                    logging.info(f"Sent\nText:\n{text}\nThought:\n{thought_matches}\nSecrets:\n{secret_matches}")
 
-                memory = chat.history
+                logging.info("Got Response.")
+                for part in response.candidates[0].content.parts:
+                    if part.executable_code is not None:
+                        logging.info("Ran Code Execution:\n" + part.executable_code.code)
+                        await send_long_message(ctx,
+                                                f"Code:\n```{part.executable_code.language.name.lower()}\n{part.executable_code.code}\n```",
+                                                MAX_MESSAGE_LENGTH)
 
-                text, thought_matches, secret_matches = clean_text(text)
-                thought = ""
-                secrets = ""
-                if thought_matches:
-                    for thought_match in thought_matches:
-                        thought += f"{thought_match}\n"
-                    text += "(This reply have a thought)"
-                if secret_matches:
-                    for secret_match in secret_matches:
-                        secrets += f"{secret_match}\n"
-                if tools == "google_search_retrieval":
-                    text = "### Multi-modality not supported while using the Google Search Retrieval tool.\n" + text + f"\n{create_grounding_markdown(response.candidates)}"
+                    if part.code_execution_result is not None:
+                        logging.info(f"Code Execution Output:\n{part.code_execution_result.output}")
+                        await send_long_message(ctx,
+                                                f"Output:\n```\n{part.code_execution_result.output}\n```",
+                                                MAX_MESSAGE_LENGTH)
 
-                response_if_tex = split_tex(text)
+                    if part.inline_data is not None:
+                        logging.info("Got Image")
+                        file_name = './temp/' + generate_unique_file_name("png")
+                        try:
+                            with open(file_name, "wb") as f:
+                                f.write(part.inline_data.data)
+                        except Exception as e:
+                            logging.error(e)
+                        file_names.append(file_name)
+                        await send_image(ctx, file_name)
 
-                if len(response_if_tex) > 1:
-                    for i, tex in enumerate(response_if_tex):
-                        if check_tex(tex):
-                            logging.info(tex)
-                            file = render_latex(tex)
-                            file_names.append(file)
-                            response_if_tex[i] = discord.File(file)
-                    await send_long_messages(ctx, response_if_tex, MAX_MESSAGE_LENGTH)
-                else:
-                    await send_long_message(ctx, text, MAX_MESSAGE_LENGTH)
+                    if part.text is not None:
+                        await handle_text_only_messages(part.text)
 
         except ssl.SSLEOFError as e:
-            error_message = f"`{e}`\nPerhaps, you can try your request again!"
+            error_message = (f"A secure connection error occurred (SSL connection unexpectedly closed)."
+                             f"This may be due to a temporary network problem or an issue with the server."
+                             f"You can try again. If the problem persists, you can wait or you can contact Google. `{e}`.")
             logging.error(f"Error: {error_message}")
             await send_long_message(ctx, error_message, MAX_MESSAGE_LENGTH)
 
-        except genai.types.StopCandidateException as e:
-            await send_long_message(ctx, f"{e}\nThat means your prompt isn't safe! Try again!", MAX_MESSAGE_LENGTH)
-
         except Exception as e:
-            await send_long_message(ctx, f"`{e}`", MAX_MESSAGE_LENGTH)
-            logging.error(f"\n{e}")
+            await send_long_message(ctx, f"A general error happened! `{e}`", MAX_MESSAGE_LENGTH)
+            logging.error(traceback.format_exc())
 
         finally:
             try:

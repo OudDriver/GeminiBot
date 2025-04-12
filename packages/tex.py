@@ -1,10 +1,15 @@
+import regex
 import logging
 from packages.utils import generate_unique_file_name
 
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
-import re
 
+def sanitize_latex(latex_text: str) -> str:
+    de_tag = regex.sub(r'<tex>|</tex>', "", latex_text)
+    whitespaced = regex.sub(r'\n', ' ', de_tag)
+
+    return whitespaced
 
 def render_latex(latex_string: str, preamble: str=r'\usepackage{amsmath}', padding: int=20, background_color: str="white",
                  text_color: str="black", dpi: int=300, font_size: int=12):
@@ -23,34 +28,27 @@ def render_latex(latex_string: str, preamble: str=r'\usepackage{amsmath}', paddi
         str: The file name of the rendered LaTeX image, or the RuntimeError if the latex_string is invalid.
     """
     try:
+        latex_string = sanitize_latex(latex_string)
 
-        # Set up LaTeX text rendering in matplotlib
         rcParams['text.usetex'] = True
         rcParams['text.latex.preamble'] = preamble
         rcParams['font.size'] = font_size
+        rcParams['font.family'] = "Computer Modern Roman"
 
-        # Initial small figure to calculate text bounding box
         fig = plt.figure(figsize=(1, 1), dpi=1)
         text = fig.text(0, 0, latex_string, color=text_color)
-        fig.canvas.draw()  # Render the figure to get accurate text size
+        fig.canvas.draw()  
+        
         bbox = text.get_window_extent(fig.canvas.get_renderer())
-
-        # Close the initial figure
         plt.close(fig)
-
-        # Set padding in inches
-        padding_inches = padding / dpi  # Convert padding from pixels to inches
-
-        # Redefine figure with proper padding and save it
+        padding_inches = padding / dpi
         fig, ax = plt.subplots(figsize=(bbox.width / dpi + 2 * padding_inches,
                                         bbox.height / dpi + 2 * padding_inches), dpi=dpi)
         fig.patch.set_facecolor(background_color)
         ax.text(0.5, 0.5, latex_string, color=text_color, ha='center', va='center', fontsize=font_size)
-        ax.set_axis_off()  # Hide axes
-
+        ax.set_axis_off()
         file_name = fr".\temp\{generate_unique_file_name(r'png')}"
-
-        # Save the figure with specified settings and padding
+        
         fig.savefig(
             file_name,
             dpi=dpi,
@@ -63,23 +61,12 @@ def render_latex(latex_string: str, preamble: str=r'\usepackage{amsmath}', paddi
         plt.close(fig)
 
         return file_name
-
     except RuntimeError as e:
-        # Syntax error at the latex expression
-        logging.error(e)
-        return e
+        logging.error(f"LaTeX rendering error! {e}")
+        return None
 
 def split_tex(input_str: str) -> list:
-    # Pattern to split the text, keeping the content within dollar signs
-    pattern = r'(\$.*?\$)|((?:[^$])+)'
-
-    # Split the text using the pattern
-    split_parts = re.findall(pattern, input_str)
-
-    # Flatten the list and remove empty strings
-    result = [item for sublist in split_parts for item in sublist if item]
-
-    return result
+    return regex.split(r'(<tex>.*?</tex>)', input_str)
 
 def check_tex(input_str: str) -> bool:
-    return input_str.startswith("$") and input_str.endswith("$")
+    return input_str.startswith("<tex>") and input_str.endswith("</tex>")

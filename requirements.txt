@@ -1,5 +1,5 @@
-discord.py
-google.generativeai
+discord.py==2.4.0
+google-genai
 pytubefix
 beautifulsoup4
 python-weather
@@ -13,3 +13,11 @@ xmltodict
 requests
 duckduckgo-search
 matplotlib
+numpy
+samplerate
+discord-ext-voice-recv
+pytest
+regex
+pytest-mock
+docker
+tqdm

@@ -1,6 +1,6 @@
 import httpx
 import xmltodict
-import re
+import regex
 from typing import Dict, Any, List
 import json
 import logging
@@ -92,15 +92,14 @@ class WolframAlphaAPI:
         """
         output: Dict[str, str] = {}
         for subpod in subpods:
-            if re.search("steps", subpod['@title']):
+            if regex.search("steps", subpod['@title']):
                 output[subpod['@title']] = subpod.get('plaintext', 'No plain text available') 
             else:
-                # noinspection PyTypeChecker
                 output.setdefault(pod_title, []).append(subpod['plaintext'])
         
         return output
     
-    def _clean_up(self, dirty_input: Dict[str, Any]) -> Dict[str, Any]:
+    def clean_up(self, dirty_input: Dict[str, Any]) -> Dict[str, Any]:
         """
         Cleans up the output from Wolfram Alpha API.
 
@@ -115,7 +114,6 @@ class WolframAlphaAPI:
         
         output: Dict[str, Any] = {}
 
-        # Check if 'pod' is a list or a dictionary
         for pod in dirty_input['pod'] if isinstance(dirty_input['pod'], list) else [dirty_input['pod']]:
             subpod_data = pod['subpod']
             if isinstance(subpod_data, list):
@@ -154,14 +152,12 @@ class WolframAlphaFullAPI(WolframAlphaAPI):
         return doc['queryresult']
 
 
-def wolfram_alpha(query: str, show_steps: bool = False, raw: bool = False):
+def wolfram_alpha(query: str):
     """
-    Sends a query to the Wolfram Alpha API. WolframAlpha can answer the simplest math questions to hard math questions.
+    Sends a query to the Wolfram Alpha API.
     
     Args:
         query: The input string for the query.
-        show_steps: Whether to show the steps or not.
-        raw: Whether to return the raw output. Use this when the cleaned output doesn't work.
         
     Returns:
         A dictionary representing the query result.
@@ -169,12 +165,8 @@ def wolfram_alpha(query: str, show_steps: bool = False, raw: bool = False):
     client = WolframAlphaFullAPI(json.load(open("config.json"))['WolframAPI'])
     
     loop = asyncio.get_running_loop()
-    output = loop.run_until_complete(client.query(query, show_steps))
-    
+    output = loop.run_until_complete(client.query(query))
+
     logging.info(output)
-    
-    if raw:
-        return output
-    else:
-        logging.info(client._clean_up(output))
-        return client._clean_up(output)
+    logging.info(client.clean_up(output))
+    return client.clean_up(output)

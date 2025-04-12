@@ -1,9 +1,7 @@
 from discord.ext import commands
-from discord.app_commands.models import AppCommand
-import json
+from bot.setup import load_config
 
-with open('config.json') as f:
-    config = json.loads(f.read())
+config = load_config()
 
 @commands.hybrid_command()
 async def sync(ctx: commands.Context):
@@ -14,8 +12,7 @@ async def sync(ctx: commands.Context):
         ctx: The context of the command invocation
     """
     if str(ctx.author.id) == str(config['OwnerID']):
-        await ctx.reply(f'Syncing...', ephemeral=True)
-        # noinspection PyUnresolvedReferences
+        await ctx.reply('Syncing...', ephemeral=True)
         synced = await ctx.bot.tree.sync()
         synced_commands = ""
         for command in synced:

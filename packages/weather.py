@@ -15,8 +15,7 @@ def get_weather(city: str):
         An output of the temperature now, and what the weather is going to be.
     """
     async def weather(city_in):
-        # declare the client. the measuring unit used defaults to the metric system (Celsius, km/h, etc.)
-        async with python_weather.Client(unit=python_weather.METRIC) as client:
+        async with python_weather.Client() as client:
             current_weather = await client.get(city_in)
             
             output = ""

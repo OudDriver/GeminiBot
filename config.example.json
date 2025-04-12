@@ -3,7 +3,6 @@
   "DiscordToken": "Your Discord Token",
   "OwnerID": "Your Owner ID",
   "WolframAPI": "Your Wolfram API App ID",
-  "BadWords": ["Your", "Bad", "Words"],
   "ModelNames": {
     "model-name-id-1": "Clean Model Name 1",
     "model-name-id-2": "Clean Model Name 2"

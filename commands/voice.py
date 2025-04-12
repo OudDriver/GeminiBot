@@ -1,6 +1,17 @@
+import json
 import logging
 import traceback
 from discord.ext import commands, voice_recv
+from google.genai.types import (
+    LiveConnectConfig,
+    Modality,
+    SpeechConfig,
+    VoiceConfig,
+    PrebuiltVoiceConfig,
+    Content,
+    Part,
+)
+
 from packages.audio import live, AudioSink, AudioSource
 from google.genai import Client
 import discord
@@ -28,7 +39,26 @@ def voice(genai_client: Client):
 
             audio_sink = AudioSink(audio_queue)
             voice_client.listen(audio_sink)
-            asyncio.create_task(live(audio_queue, genai_client, 'gemini-2.0-flash-exp', {"response_modalities": ["AUDIO"]}))
+
+            with open("temp/temp_config.json") as TEMP_CONFIG:
+                temp_config = json.load(TEMP_CONFIG)
+
+            system_instructions = temp_config["system_prompt"]
+
+            config = LiveConnectConfig(
+                response_modalities=[Modality.AUDIO],
+                speech_config=SpeechConfig(
+                    voice_config=VoiceConfig(
+                        prebuilt_voice_config=PrebuiltVoiceConfig(voice_name="Leda")
+                    )
+                ),
+                system_instruction=Content(
+                    parts=[Part.from_text(text=system_instructions)],
+                    role="user",
+                ),
+            )
+
+            asyncio.create_task(live(audio_queue, genai_client, 'gemini-2.0-flash-live-001', config))
 
             audio_source = AudioSource()
             voice_client.play(audio_source)

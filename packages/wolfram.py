@@ -165,7 +165,7 @@ def wolfram_alpha(query: str):
     client = WolframAlphaFullAPI(json.load(open("config.json"))['WolframAPI'])
     
     loop = asyncio.get_running_loop()
-    output = loop.run_until_complete(client.query(query, False))
+    output = loop.run_until_complete(client.query(query))
 
     logging.info(output)
     logging.info(client.clean_up(output))

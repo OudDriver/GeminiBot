@@ -12,6 +12,8 @@ import logging
 import requests
 import regex
 import nest_asyncio
+import subprocess
+import platform
 
 from packages.maps import subscript_map, superscript_map
 import docker
@@ -89,7 +91,54 @@ def reply(message: str):
     loop = asyncio.get_running_loop()
     loop.run_until_complete(_reply(message))
 
-def execute_code(code_string: str) -> str:
+def start_docker_daemon():
+    """
+    Attempts to start the Docker daemon on Windows, Linux, and macOS.
+
+    Returns:
+        bool: True if the Docker daemon appears to have started successfully,
+              False otherwise.  It returns True also if docker is already running
+    """
+
+    os_name = platform.system()
+
+    try:
+        subprocess.run(['docker', 'info'], check=True, capture_output=True, text=True)
+        logging.info("Docker is already running.")
+        return True
+
+    except subprocess.CalledProcessError:
+        logging.warning("Docker is not running. Attempting to start...")
+
+        try:
+            if os_name == "Windows":
+                docker_desktop_path = r"C:\Program Files\Docker\Docker\Docker Desktop.exe"
+                subprocess.run([docker_desktop_path], check=True, capture_output=True, text=True)
+                logging.info("Docker started on Windows.")
+                return True
+            elif os_name == "Linux":
+                subprocess.run(['sudo', 'systemctl', 'start', 'docker'], check=True, capture_output=True, text=True)
+                logging.info("Docker started on Linux.")
+                return True
+            elif os_name == "Darwin":  # macOS
+                subprocess.run(['open', '/Applications/Docker.app'], check=True, capture_output=True, text=True)
+                logging.info("Docker started on macOS.")
+                return True
+            else:
+                logging.info(f"Unsupported operating system: {os_name}")
+                return False
+
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Error starting Docker on {os_name}: {e}")
+            return False
+        except FileNotFoundError as e:
+            print(f"Docker Desktop not found. {e}")
+            return False
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            return False
+
+def execute_code(code_string: str) -> str | None:
     """Executes Python code. Times out in 5 seconds.
 
     Args:
@@ -99,30 +148,72 @@ def execute_code(code_string: str) -> str:
         The captured output (stdout and stderr).
     """
     timeout_seconds = 5
-    encoded_string = code_string.encode().decode('unicode_escape')
-    client = docker.from_env()
+    encoded_string = code_string.encode().decode("unicode_escape")
 
     container_name = f"python-sandbox-{uuid.uuid4()}"
+    image_name = "python-sandbox-image"  # Make image name a variable
+    client = None
+
 
     try:
-        container = client.containers.run(
-            "python-sandbox-image",
-            command=["python", "-c", code_string],
-            detach=True,
-            mem_limit="128m",
-            cpu_shares=102,
-            name=container_name,
-            network_disabled=True,
-            read_only=True,
-            stdout=True,
-            stderr=True,
-        )
+        try:
+            client = docker.from_env()
+
+            client.ping()
+            logging.info("Successfully connected to Docker daemon.")
+
+        except (requests.exceptions.ConnectionError, docker.errors.APIError) as e:
+            log_msg = f"Docker Daemon Connection Error (ping failed): {traceback.format_exc()}"
+            logging.error(log_msg)
+            reply_msg = (
+                f"Error connecting to Docker daemon: {e}. "
+                "Please ensure Docker Desktop (or the Docker daemon service) "
+                "is running and responsive."
+            )
+            reply(reply_msg)
+            return reply_msg  # Return early, cannot proceed
+        except docker.errors.DockerException as e:
+            # Catches other Docker-related errors during client initialization
+            log_msg = f"Failed to initialize Docker client: {traceback.format_exc()}"
+            logging.error(log_msg)
+            reply_msg = f"Error initializing Docker client: {e}. Is Docker installed correctly and the service running?"
+            reply(reply_msg)
+            return reply_msg  # Return early
+        except Exception as e:  # Catch any other unexpected error during init/ping
+            log_msg = f"Unexpected error initializing Docker or pinging daemon: {traceback.format_exc()}"
+            logging.error(log_msg)
+            reply_msg = f"Unexpected error connecting to Docker: {e}"
+            reply(reply_msg)
+            return reply_msg  # Return early
+
+        try:
+            client.images.get(image_name)
+            logging.info(f"Required Docker image '{image_name}' found.")
+        except docker.errors.ImageNotFound:
+            log_msg = f"Required Docker image '{image_name}' not found."
+            logging.error(log_msg)
+            reply_msg = (
+                f"Error: The required Docker image '{image_name}' was not found locally. "
+                f"Please build or pull the image before running the code execution."
+            )
+            reply(reply_msg)
+            return reply_msg
+        except docker.errors.APIError as e:
+            log_msg = f"Docker API Error checking for image '{image_name}': {traceback.format_exc()}"
+            logging.error(log_msg)
+            reply_msg = f"Error checking for Docker image '{image_name}': {e}"
+            reply(reply_msg)
+            return reply_msg
+
+        container = client.containers.run("python-sandbox-image", command=["python", "-c", code_string], detach=True,
+                                          mem_limit="128m", cpu_shares=102, name=container_name, network_disabled=True,
+                                          read_only=True, stderr=True)
 
         result = container.wait(timeout=timeout_seconds)
         exit_code = result.get('StatusCode', -1)  # Default to -1 if key missing
 
         # Capture output (stdout and stderr)
-        output = container.logs(stdout=True, stderr=True).decode("utf-8", errors="replace")
+        output = container.logs().decode(errors="replace")
 
         if exit_code != 0:
             # Append error message if the container exited abnormally
@@ -160,7 +251,7 @@ def execute_code(code_string: str) -> str:
         try:
             container = client.containers.get(container_name)
             container.remove(force=True)  # Make sure it is cleaned up
-        except:
+        except Exception:
             pass
 
 def create_grounding_markdown(candidates: list[Candidate]):
@@ -238,7 +329,7 @@ def save_temp_config(model: str | None=None, system_prompt_data: str | None=None
                 new_config["secret"] = existing_secrets + [secret]  # Append the new secret
         else:
             # Handle the case where 'secret' exists but is not a list.
-            #  We'll overwrite it with a new list containing the provided secret.
+            # We'll overwrite it with a new list containing the provided secret.
             if isinstance(secret, list):
                  new_config["secret"] = secret
             else:
@@ -261,7 +352,7 @@ def read_temp_config():
     temp_config_path = "temp/temp_config.json"
 
     try:
-        with open(temp_config_path, "r") as f:
+        with open(temp_config_path) as f:
             config = json.load(f)
             return config
     except (FileNotFoundError, json.JSONDecodeError) as e:

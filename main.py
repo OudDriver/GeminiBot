@@ -12,9 +12,13 @@ from commands.thought import thought
 from commands.secret import secret
 from commands.voice import voice, leave
 from commands.usage import usage
+from packages.utils import start_docker_daemon
+
 
 def main():
     """Main function to run the bot."""
+    start_docker_daemon()
+
     config = load_config()
     setup_logging()
     genai_client = setup_gemini(config['GeminiAPIkey'])
@@ -34,6 +38,7 @@ def main():
     client.add_command(voice(genai_client))  
     client.add_command(leave)
     client.add_command(usage)
+    client.add_command(imagen(genai_client))
 
     client.run(config['DiscordToken'], log_handler=None)
 

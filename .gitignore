@@ -3,6 +3,7 @@
 *$py.class
 *.so
 .coverage
+htmlcov/
 
 .vscode/
 venv/

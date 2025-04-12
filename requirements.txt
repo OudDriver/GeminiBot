@@ -16,7 +16,8 @@ matplotlib
 numpy
 samplerate
 discord-ext-voice-recv
-
+pytest
 regex
+pytest-mock
 docker
 tqdm

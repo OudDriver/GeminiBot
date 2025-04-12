@@ -6,6 +6,7 @@ from bot.setup import load_config, setup_logging, setup_gemini, get_initial_stat
 from bot.events import register_events
 
 from commands import register_commands
+from commands.imagen import imagen
 from commands.sync import sync
 from commands.thought import thought
 from commands.secret import secret
@@ -34,7 +35,7 @@ def main():
     client.add_command(leave)
     client.add_command(usage)
 
-    client.run(config['DiscordToken'])
+    client.run(config['DiscordToken'], log_handler=None)
 
 if __name__ == "__main__":
     main()

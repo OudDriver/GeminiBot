@@ -15,7 +15,7 @@ def run_command(command):
         print(f"Standard Error: {e.stderr}")
         return e.returncode  # Or raise the exception, depending on desired behavior
 
-install_command = run_command("pip install -m requirements.txt")
+install_command = run_command("pip install -r requirements.txt")
 print(f"Command returned: {install_command}")
 
 docker_command = run_command("python install_docker.py")

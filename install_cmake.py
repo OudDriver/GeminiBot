@@ -32,13 +32,15 @@ def get_distro_info():
 
     return distro_info
 
-def install_cmake():
+def install_build_essentials():
     """
-    Identifies the distro and attempts to install CMake using the correct package manager.
+    Identifies the distro and attempts to install CMake and essential build tools
+    (like C/C++ compilers) using the correct package manager.
+    Returns True if both installations succeed, False otherwise.
     """
     distro_info = get_distro_info()
     distro_id = distro_info.get('ID')
-    id_like = distro_info.get('ID_LIKE', []) # Default to empty list
+    id_like = distro_info.get('ID_LIKE', [])
 
     if not distro_id and not id_like:
         print("Could not reliably determine the distribution.", file=sys.stderr)
@@ -47,65 +49,115 @@ def install_cmake():
     print(f"Detected Distro ID: {distro_id}")
     print(f"Detected ID_LIKE: {id_like}")
 
-    success = False
+    cmake_installed = False
+    compilers_installed = False
 
     # --- Debian / Ubuntu / Mint etc. ---
-    # Check ID or if 'debian' is in ID_LIKE
     if distro_id in ["debian", "ubuntu", "mint", "pop", "raspbian", "linuxmint"] or "debian" in id_like:
         print("Detected Debian-based distribution (apt).")
-        # Use apt-get for better script stability compared to apt
         if run_command(["apt-get", "update", "-y"]):
-            success = run_command(["apt-get", "install", "-y", "cmake"])
+            print("\nAttempting to install cmake...")
+            if run_command(["apt-get", "install", "-y", "cmake"]):
+                cmake_installed = True
+                print("\nAttempting to install essential build tools (build-essential)...")
+                if run_command(["apt-get", "install", "-y", "build-essential"]):
+                    compilers_installed = True
+                else:
+                    print("Failed to install build-essential.", file=sys.stderr)
+            else:
+                 print("Failed to install cmake.", file=sys.stderr)
         else:
             print("Failed to update package lists (apt-get update).", file=sys.stderr)
 
     # --- Fedora / RHEL / CentOS / Rocky / Alma ---
-    # Check ID or if 'fedora' or 'rhel' is in ID_LIKE
     elif distro_id in ["fedora", "rhel", "centos", "rocky", "almalinux"] or "fedora" in id_like or "rhel" in id_like:
         print("Detected Red Hat-based distribution (dnf/yum).")
-        # Prefer dnf if available, otherwise fall back to yum
-        if shutil.which("dnf"):
-            print("Using dnf package manager.")
-            success = run_command(["dnf", "install", "-y", "cmake"])
-        elif shutil.which("yum"):
-            print("dnf not found, using yum package manager.")
-            success = run_command(["yum", "install", "-y", "cmake"])
+        pkg_manager = "dnf" if shutil.which("dnf") else "yum" if shutil.which("yum") else None
+
+        if pkg_manager:
+            print(f"Using {pkg_manager} package manager.")
+            print("\nAttempting to install cmake...")
+            if run_command([pkg_manager, "install", "-y", "cmake"]):
+                cmake_installed = True
+                print("\nAttempting to install essential build tools (Development Tools group)...")
+                # Use groupinstall or group install depending on manager/version
+                if run_command([pkg_manager, "groupinstall", "-y", "Development Tools"]):
+                     compilers_installed = True
+                else:
+                     print("Trying 'group install' instead of 'groupinstall'...")
+                     if run_command([pkg_manager, "group", "install", "-y", "Development Tools"]):
+                         compilers_installed = True
+                     else:
+                         print("Failed to install Development Tools group.", file=sys.stderr)
+            else:
+                print("Failed to install cmake.", file=sys.stderr)
         else:
             print("Error: Neither dnf nor yum package managers found.", file=sys.stderr)
 
     # --- Arch Linux / Manjaro ---
-    # Check ID or if 'arch' is in ID_LIKE
     elif distro_id in ["arch", "manjaro"] or "arch" in id_like:
          print("Detected Arch-based distribution (pacman).")
-         # Arch users typically sync repos and update (-Sy) when installing.
-         # Use -Syu to also upgrade packages (common practice) or just -Sy cmake
-         # --noconfirm is needed for non-interactive use. Be cautious.
-         success = run_command(["pacman", "-Syu", "--noconfirm", "cmake"])
-         # If you only want to install cmake without full system upgrade:
-         # success = run_command(["pacman", "-Sy", "--noconfirm", "cmake"])
-
+         print("\nAttempting to sync repositories and install cmake...")
+         # Combine update and install for typical Arch workflow
+         # Using --needed ensures packages aren't reinstalled unnecessarily
+         if run_command(["pacman", "-Syu", "--noconfirm", "--needed", "cmake"]):
+              cmake_installed = True
+              print("\nAttempting to install essential build tools (base-devel)...")
+              # base-devel might prompt for choices, handle non-interactively if possible
+              # Often largely installed, --needed is important here.
+              if run_command(["pacman", "-S", "--noconfirm", "--needed", "base-devel"]):
+                   compilers_installed = True
+              else:
+                   print("Failed to install base-devel group.", file=sys.stderr)
+         else:
+              print("Failed to sync repositories or install cmake.", file=sys.stderr)
 
     # --- openSUSE / SLES ---
-    # Check ID or if 'suse' is in ID_LIKE
     elif distro_id in ["opensuse", "opensuse-leap", "opensuse-tumbleweed", "sles"] or "suse" in id_like:
         print("Detected SUSE-based distribution (zypper).")
-        # -n for non-interactive mode is equivalent to -y for install/update
-        success = run_command(["zypper", "install", "--non-interactive", "cmake"])
+        print("\nAttempting to install cmake...")
+        if run_command(["zypper", "install", "--non-interactive", "cmake"]):
+            cmake_installed = True
+            print("\nAttempting to install essential build tools pattern (devel_basis)...")
+            if run_command(["zypper", "install", "--non-interactive", "-t", "pattern", "devel_basis"]):
+                compilers_installed = True
+            else:
+                print("Failed to install devel_basis pattern.", file=sys.stderr)
+        else:
+             print("Failed to install cmake.", file=sys.stderr)
 
     # --- Alpine Linux ---
     elif distro_id == "alpine":
         print("Detected Alpine Linux (apk).")
         if run_command(["apk", "update"]):
-             success = run_command(["apk", "add", "cmake"])
+             print("\nAttempting to install cmake...")
+             if run_command(["apk", "add", "cmake"]):
+                  cmake_installed = True
+                  print("\nAttempting to install essential build tools (build-base)...")
+                  if run_command(["apk", "add", "build-base"]):
+                       compilers_installed = True
+                  else:
+                       print("Failed to install build-base.", file=sys.stderr)
+             else:
+                  print("Failed to install cmake.", file=sys.stderr)
         else:
             print("Failed to update apk repositories.", file=sys.stderr)
 
     # --- Unsupported ---
     else:
         print(f"Error: Unsupported distribution: ID='{distro_id}', ID_LIKE='{id_like}'", file=sys.stderr)
-        print("Please install CMake manually using your system's package manager.", file=sys.stderr)
+        print("Please install CMake and build tools manually using your system's package manager.", file=sys.stderr)
+        return False # Definitely failed
 
-    return success
+    if not cmake_installed:
+        print("\nCMake installation failed.", file=sys.stderr)
+    if cmake_installed and not compilers_installed:
+        print("\nWarning: CMake installed, but failed to install essential C/C++ compilers.", file=sys.stderr)
+        print("You may need to install them manually (e.g., gcc, g++, make, or a development tools group).", file=sys.stderr)
+        # Consider this a partial failure? Return False for safety.
+        return False
+
+    return cmake_installed and compilers_installed
 
 def verify_installation():
     """Checks if cmake command is available and runs --version."""
@@ -127,12 +179,12 @@ if __name__ == "__main__":
         print("\nWarning: Running script as root.", file=sys.stderr)
         print("Package manager commands will be run directly without 'sudo'.\n", file=sys.stderr)
 
-    install_successful = install_cmake()
+    install_successful = install_build_essentials()
 
     if install_successful:
-        print("\nCMake installation command executed successfully.")
+        print("\nnCMake and essential build tools installation commands executed successfully.")
         if verify_installation():
-             print("\nCMake successfully installed and verified.")
+             print("\nCMake installation verified.")
              sys.exit(0) # Exit with success code
         else:
              print("\nCMake installation command ran, but verification failed.", file=sys.stderr)

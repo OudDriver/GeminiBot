@@ -37,7 +37,7 @@ def run_command(cmd_list: list[str] | str):
     Returns True on success (exit code 0), False on failure.
     """
     if type(cmd_list) is str:
-        cmd_list.split(' ')
+        cmd_list = cmd_list.split(' ')
 
     if os.geteuid() != 0:
         if shutil.which("sudo"):

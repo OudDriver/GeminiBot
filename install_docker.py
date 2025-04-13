@@ -281,7 +281,7 @@ def install_docker():
                         print("Ensure Docker Desktop is running.", file=sys.stderr)
                     return False # Indicate failure
             except Exception as e:
-                print("An error occurred while trying to verify Docker! " + e)
+                print(f"An error occurred while trying to verify Docker! {e}")
 
     except Exception as e:
         print("\n--- An error occurred during the Docker setup process ---", file=sys.stderr)

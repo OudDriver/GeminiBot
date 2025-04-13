@@ -37,6 +37,8 @@ This project is your implementation of the Gemini LLM in discord. Think of it as
    python setup.py
    ```
    and follow all instructions. Make sure your setup isn't so bad it can't run Docker.
+   Sometimes, Linux likes to crap on itself, so, you may have to change the commands inside setup.py so it uses pip3.12 instead of pip, python3.12 instead of python, etc.
+   Remember that the CMake command will fail if you're on Windows.
 4. **Configure Your Bot:** Rename `config.example.json` to `config.json` and fill in your bot's details (API keys, etc.), or rename `config.template.json` to `config.json` and fill in the missing blanks.
 5. **Launch GeminiBot!**  From your bot's directory, run:
    ```bash

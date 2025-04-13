@@ -65,6 +65,9 @@ def install_build_essentials():
                     compilers_installed = True
                 else:
                     print("Failed to install build-essential.", file=sys.stderr)
+
+                if not run_command(["apt-get", "install", "-y", "python3-dev"]):
+                    print("Failed to install python3-dev")
             else:
                  print("Failed to install cmake.", file=sys.stderr)
         else:
@@ -85,11 +88,18 @@ def install_build_essentials():
                 if run_command([pkg_manager, "groupinstall", "-y", "Development Tools"]):
                      compilers_installed = True
                 else:
-                     print("Trying 'group install' instead of 'groupinstall'...")
-                     if run_command([pkg_manager, "group", "install", "-y", "Development Tools"]):
-                         compilers_installed = True
-                     else:
-                         print("Failed to install Development Tools group.", file=sys.stderr)
+                    print("Trying 'group install' instead of 'groupinstall'...")
+                    if run_command(
+                        [pkg_manager, "group", "install", "-y", "Development Tools"]
+                    ):
+                        compilers_installed = True
+                    else:
+                        print(
+                            "Failed to install Development Tools group.",
+                            file=sys.stderr,
+                        )
+                if not run_command([pkg_manager, "install", "-y", "python3-devel"]):
+                    print("Failed to install python3-devel")
             else:
                 print("Failed to install cmake.", file=sys.stderr)
         else:
@@ -97,21 +107,22 @@ def install_build_essentials():
 
     # --- Arch Linux / Manjaro ---
     elif distro_id in ["arch", "manjaro"] or "arch" in id_like:
-         print("Detected Arch-based distribution (pacman).")
-         print("\nAttempting to sync repositories and install cmake...")
-         # Combine update and install for typical Arch workflow
-         # Using --needed ensures packages aren't reinstalled unnecessarily
-         if run_command(["pacman", "-Syu", "--noconfirm", "--needed", "cmake"]):
-              cmake_installed = True
-              print("\nAttempting to install essential build tools (base-devel)...")
-              # base-devel might prompt for choices, handle non-interactively if possible
-              # Often largely installed, --needed is important here.
-              if run_command(["pacman", "-S", "--noconfirm", "--needed", "base-devel"]):
-                   compilers_installed = True
-              else:
-                   print("Failed to install base-devel group.", file=sys.stderr)
-         else:
-              print("Failed to sync repositories or install cmake.", file=sys.stderr)
+        print("Detected Arch-based distribution (pacman).")
+        print("\nAttempting to sync repositories and install cmake...")
+        # Combine update and install for typical Arch workflow
+        # Using --needed ensures packages aren't reinstalled unnecessarily
+        if run_command(["pacman", "-Syu", "--noconfirm", "--needed", "cmake"]):
+            cmake_installed = True
+            print("\nAttempting to install essential build tools (base-devel)...")
+            # base-devel might prompt for choices, handle non-interactively if possible
+            # Often largely installed, --needed is important here.
+
+            if run_command(["pacman", "-S", "--noconfirm", "--needed", "base-devel"]):
+                compilers_installed = True
+            else:
+                print("Failed to install base-devel group.", file=sys.stderr)
+        else:
+            print("Failed to sync repositories or install cmake.", file=sys.stderr)
 
     # --- openSUSE / SLES ---
     elif distro_id in ["opensuse", "opensuse-leap", "opensuse-tumbleweed", "sles"] or "suse" in id_like:
@@ -124,6 +135,9 @@ def install_build_essentials():
                 compilers_installed = True
             else:
                 print("Failed to install devel_basis pattern.", file=sys.stderr)
+
+            if not run_command(["zypper", "install", "-y", "python3-devel"]):
+                print("Failed to install python3-devel")
         else:
              print("Failed to install cmake.", file=sys.stderr)
 
@@ -131,16 +145,19 @@ def install_build_essentials():
     elif distro_id == "alpine":
         print("Detected Alpine Linux (apk).")
         if run_command(["apk", "update"]):
-             print("\nAttempting to install cmake...")
-             if run_command(["apk", "add", "cmake"]):
-                  cmake_installed = True
-                  print("\nAttempting to install essential build tools (build-base)...")
-                  if run_command(["apk", "add", "build-base"]):
-                       compilers_installed = True
-                  else:
-                       print("Failed to install build-base.", file=sys.stderr)
-             else:
-                  print("Failed to install cmake.", file=sys.stderr)
+            print("\nAttempting to install cmake...")
+            if run_command(["apk", "add", "cmake"]):
+                cmake_installed = True
+                print("\nAttempting to install essential build tools (build-base)...")
+                if run_command(["apk", "add", "build-base"]):
+                    compilers_installed = True
+                else:
+                    print("Failed to install build-base.", file=sys.stderr)
+
+                if not run_command(["apk", "install", "-y", "python3-devel"]):
+                    print("Failed to install python3-devel")
+            else:
+                print("Failed to install cmake.", file=sys.stderr)
         else:
             print("Failed to update apk repositories.", file=sys.stderr)
 

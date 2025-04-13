@@ -1,7 +1,8 @@
 import os
 from setup import run_command
 import sys
-import shutil # To check for command existence (e.g., dnf, yum, sudo)
+import shutil
+
 def get_distro_info():
     """
     Detects Linux distribution information from /etc/os-release.
@@ -182,7 +183,7 @@ if __name__ == "__main__":
     install_successful = install_build_essentials()
 
     if install_successful:
-        print("\nnCMake and essential build tools installation commands executed successfully.")
+        print("\nCMake and essential build tools installation commands executed successfully.")
         if verify_installation():
              print("\nCMake installation verified.")
              sys.exit(0) # Exit with success code

@@ -141,10 +141,10 @@ def run_command(cmd_list: list[str] | str):
 
 
 if __name__ == "__main__":
-    install_command = run_command("pip install -r requirements.txt".split(" "))
+    install_command = run_command("python install_cmake.py".split(" "))
     print(f"Command returned: {install_command}")
 
-    install_command = run_command("python install_cmake.py".split(" "))
+    install_command = run_command("pip install -r requirements.txt".split(" "))
     print(f"Command returned: {install_command}")
 
     docker_command = run_command("python install_docker.py".split(" "))

@@ -241,7 +241,7 @@ def install_docker():
                     return False # Indicate manual step needed
 
             except Exception as e:
-                print("Installing Docker on MacOS failed! " + e)
+                print(f"Installing Docker on MacOS failed! {e}")
 
         elif system == "Windows":
             download_url_windows = 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe'

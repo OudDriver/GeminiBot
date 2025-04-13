@@ -55,7 +55,6 @@ def run_command(cmd_list: list[str] | str):
             text=True, # Decode output as text
             bufsize=1, # Line-buffered
             universal_newlines=True, # Ensure cross-platform newline handling
-            shell=True
         )
 
         # Create queue and threads for reading output

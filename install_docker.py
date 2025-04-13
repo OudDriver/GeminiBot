@@ -6,6 +6,7 @@ import requests
 from tqdm import tqdm
 import os
 from urllib.parse import urlparse
+from setup import run_command
 
 # Updated Dockerfile content to use Python 3.12 and a unique user
 DOCKERFILE_CONTENT = """
@@ -97,36 +98,6 @@ def download_file_with_progress(url: str, local_filename: str=None, chunk_size: 
     except Exception as e:
         print(f"\nAn unexpected error occurred: {e}")
 
-def run_command(command: list[str] | str, shell: bool=False, check: bool=True, capture_output: bool=False):
-    """Helper function to run subprocess commands with better error reporting."""
-    cmd_str = ' '.join(command) if isinstance(command, list) else command
-    print(f"Running command: {cmd_str}")
-    try:
-        # Using text=True for automatic decoding, capture_output implies stdout/stderr capture
-        result = subprocess.run(command, shell=shell, check=check, text=True,
-                                capture_output=capture_output or not check) # Capture if not checking or explicitly asked
-        if capture_output:
-            if result.stdout:
-                print(result.stdout.strip())
-            if result.stderr:
-                print(f"Stderr: {result.stderr.strip()}", file=sys.stderr)
-        return result
-    except subprocess.CalledProcessError as e:
-        print(f"Error running command: {cmd_str}", file=sys.stderr)
-        print(f"Return code: {e.returncode}", file=sys.stderr)
-        # Error details are often in stderr even when capture_output=False
-        if e.stdout:
-            print(f"Stdout: {e.stdout.strip()}", file=sys.stderr)
-        if e.stderr:
-            print(f"Stderr: {e.stderr.strip()}", file=sys.stderr)
-        raise # Re-raise the exception to stop execution
-    except FileNotFoundError:
-        cmd_name = command[0] if isinstance(command, list) else command.split()[0]
-        print(f"Error: Command '{cmd_name}' not found.", file=sys.stderr)
-        print("Please ensure the necessary tools (like docker, sudo, curl, apt-get, yum, brew etc.) are installed and in your PATH.", file=sys.stderr)
-        raise
-
-
 def get_linux_distro():
     """Attempts to identify the Linux distribution using /etc/os-release."""
     try:
@@ -157,9 +128,9 @@ def install_docker():
 
     # Check if Docker is already installed and runnable
     try:
-        run_command(["docker", "--version"], capture_output=True)
+        run_command(["docker", "--version"])
         # Check if docker daemon is responding
-        run_command(["docker", "info"], capture_output=True)
+        run_command(["docker", "info"])
         print("Docker is already installed and the daemon is running.")
         return True # Indicate Docker is ready
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
@@ -217,13 +188,13 @@ def install_docker():
 
             if repo_setup_done:
                 for cmd in install_cmds:
-                    run_command(cmd, shell=True)
+                    run_command(cmd)
                 print("Installing Docker packages...")
-                run_command(package_install_cmd, shell=True)
+                run_command(package_install_cmd)
 
                 print("Starting and enabling Docker service...")
-                run_command("sudo systemctl start docker", shell=True)
-                run_command("sudo systemctl enable docker", shell=True)
+                run_command("sudo systemctl start docker")
+                run_command("sudo systemctl enable docker")
 
                 print("Configuring Docker group (optional)...")
                 try:
@@ -242,7 +213,7 @@ def install_docker():
         elif system == "Darwin":  # macOS
             print("Checking for Homebrew...")
             try:
-                run_command(["brew", "--version"], capture_output=True)
+                run_command(["brew", "--version"])
                 print("Homebrew found. Installing/updating Docker Desktop via Homebrew...")
                 # `brew install` will update if already installed
                 run_command(["brew", "install", "--cask", "docker"])
@@ -278,7 +249,7 @@ def install_docker():
         for i in range(max_retries):
             try:
                 # Use a simple command like 'docker info' which requires daemon connection
-                run_command(["docker", "info"], capture_output=True)
+                run_command(["docker", "info"])
                 print("Docker daemon is running and responding.")
                 return True # Success! Docker is ready.
             except (subprocess.CalledProcessError, FileNotFoundError) as docker_err:

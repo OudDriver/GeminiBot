@@ -140,7 +140,7 @@ def run_command(cmd_list: list[str] | str):
                 process.kill()  # Force kill if terminate didn't work
 
 
-if "__name__" == "__main__":
+if __name__ == "__main__":
     install_command = run_command("pip install -r requirements.txt".split(" "))
     print(f"Command returned: {install_command}")
 

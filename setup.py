@@ -136,14 +136,19 @@ def run_command(cmd_list: list[str] | str):
             print("Warning: Forcibly terminating process due to incomplete exit.", file=sys.stderr)
             process.terminate() # Try graceful termination first
             try:
-                process.wait(timeout=2) # Wait briefly
+                process.wait(timeout=2)  # Wait briefly
             except subprocess.TimeoutExpired:
-                process.kill() # Force kill if terminate didn't work
+                process.kill()  # Force kill if terminate didn't work
 
-install_command = run_command("pip install -r requirements.txt".split(' '))
-print(f"Command returned: {install_command}")
 
-docker_command = run_command("python install_docker.py".split(' '))
-print(f"Docker command exited with code {docker_command}")
+if "__name__" == "__main__":
+    install_command = run_command("pip install -r requirements.txt".split(" "))
+    print(f"Command returned: {install_command}")
 
-print("Review any errors and run main.py!")
+    install_command = run_command("python install_cmake.py".split(" "))
+    print(f"Command returned: {install_command}")
+
+    docker_command = run_command("python install_docker.py".split(" "))
+    print(f"Docker command exited with code {docker_command}")
+
+    print("Review any errors and run main.py!")

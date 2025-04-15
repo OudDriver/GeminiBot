@@ -17,10 +17,10 @@ from packages.utils import start_docker_daemon
 
 def main():
     """Main function to run the bot."""
-    start_docker_daemon()
-
     config = load_config()
     setup_logging()
+    
+    start_docker_daemon()
     genai_client = setup_gemini(config['GeminiAPIkey'])
     initial_state = get_initial_state(config)
 

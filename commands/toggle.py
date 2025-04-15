@@ -66,7 +66,7 @@ def setup_toggle_command(client, initial_state):
             if not index:
                 initial_state["active_tools_index"] = (initial_state["active_tools_index"] + 1) % len(tools_names)
             else:
-                if not 1 <= index <= len(tools_names):
+                if 1 <= index <= len(tools_names):
                     initial_state["active_tools_index"] = index
                 else:
                     await ctx.reply(f"Index out of bounds! Please use a number between 1 and {len(tools_names)}. Use the !list command for more information about the choices available.", ephemeral=True)

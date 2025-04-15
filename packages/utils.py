@@ -103,7 +103,10 @@ def start_docker_daemon():
     os_name = platform.system()
 
     try:
-        subprocess.run(['docker', 'info'], check=True, capture_output=True, text=True)
+        if os_name == "Linux":
+            subprocess.run(['sudo', 'docker', 'info'], check=True, capture_output=True, text=True)
+        else:
+            subprocess.run(['docker', 'info'], check=True, capture_output=True, text=True)
         logging.info("Docker is already running.")
         return True
 

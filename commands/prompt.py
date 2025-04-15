@@ -192,6 +192,8 @@ def prompt(tools: list[Tool], genai_client: Client):
                 logging.info(f"Got Final Prompt {final_prompt}")
 
                 response = await chat.send_message(final_prompt)
+                
+                print(len(response.candidates[0].content.parts))
 
                 if response.candidates[0].finish_reason == FinishReason.MALFORMED_FUNCTION_CALL:
                     logging.error("Function call is malformed!")
@@ -212,47 +214,6 @@ def prompt(tools: list[Tool], genai_client: Client):
                 latest_token_count = response.usage_metadata.total_token_count
 
                 memory = chat._curated_history
-
-                async def handle_text_only_messages(text):
-                    text, thought_matches, secret_matches = clean_text(text)
-
-                    if configs['uwu']:
-                        uwu = Uwuifier()
-                        text = uwu.uwuify_sentence(text)
-
-                    if thought_matches:
-                        save_temp_config(thought=thought_matches)
-                        text += "\n(This reply have a thought)"
-
-                    if secret_matches:
-                        save_temp_config(secret=secret_matches)
-
-                    if any(not callable(tool) and tool.google_search for tool in tools):
-                        text = text + f"\n{create_grounding_markdown(response.candidates)}"
-
-                    if response.candidates[0].finish_reason == FinishReason.MAX_TOKENS:
-                        text = text + "\n(Response May Be Cut Off)"
-
-                    response_if_tex = split_tex(text)
-
-                    if len(response_if_tex) > 1:
-                        for j, tex in enumerate(response_if_tex):
-                            if check_tex(tex):
-                                logging.info(tex)
-                                file_tex = render_latex(tex)
-                                if not file_tex:
-                                    response_if_tex[j] += " (Contains Invalid LaTeX Expressions)"
-                                    continue
-                                file_names.append(file_tex)
-                                response_if_tex[j] = discord.File(file_tex)
-
-                        await send_long_messages(
-                            ctx, response_if_tex, MAX_MESSAGE_LENGTH
-                        )
-                    else:
-                        await send_long_message(ctx, text, MAX_MESSAGE_LENGTH)
-
-                    logging.info(f"Sent\nText:\n{text}\nThought:\n{thought_matches}\nSecrets:\n{secret_matches}")
 
                 logging.info("Got Response.")
                 for part in response.candidates[0].content.parts:
@@ -280,11 +241,49 @@ def prompt(tools: list[Tool], genai_client: Client):
                         await send_image(ctx, file_name)
 
                     if part.text is not None:
-                        await handle_text_only_messages(part.text)
+                        text, thought_matches, secret_matches = clean_text(part.text)
+
+                        if configs['uwu']:
+                            uwu = Uwuifier()
+                            text = uwu.uwuify_sentence(text)
+
+                        if thought_matches:
+                            save_temp_config(thought=thought_matches)
+                            text += "\n(This reply have a thought)"
+
+                        if secret_matches:
+                            save_temp_config(secret=secret_matches)
+
+                        if any(not callable(tool) and tool.google_search for tool in tools):
+                            text = text + f"\n{create_grounding_markdown(response.candidates)}"
+
+                        if response.candidates[0].finish_reason == FinishReason.MAX_TOKENS:
+                            text = text + "\n(Response May Be Cut Off)"
+
+                        response_if_tex = split_tex(text)
+
+                        if len(response_if_tex) > 1:
+                            for j, tex in enumerate(response_if_tex):
+                                if check_tex(tex):
+                                    logging.info(tex)
+                                    file_tex = render_latex(tex)
+                                    if not file_tex:
+                                        response_if_tex[j] += " (Contains Invalid LaTeX Expressions)"
+                                        continue
+                                    file_names.append(file_tex)
+                                    response_if_tex[j] = discord.File(file_tex)
+
+                            await send_long_messages(
+                                ctx, response_if_tex, MAX_MESSAGE_LENGTH
+                            )
+                        else:
+                            await send_long_message(ctx, text, MAX_MESSAGE_LENGTH)
+
+                        logging.info(f"Sent\nText:\n{text}\nThought:\n{thought_matches}\nSecrets:\n{secret_matches}")
 
         except ssl.SSLEOFError as e:
-            error_message = (f"A secure connection error occurred (SSL connection unexpectedly closed)."
-                             f"This may be due to a temporary network problem or an issue with the server."
+            error_message = ("A secure connection error occurred (SSL connection unexpectedly closed)."
+                             "This may be due to a temporary network problem or an issue with the server."
                              f"You can try again. If the problem persists, you can wait or you can contact Google. `{e}`.")
             logging.error(f"Error: {error_message}")
             await send_long_message(ctx, error_message, MAX_MESSAGE_LENGTH)

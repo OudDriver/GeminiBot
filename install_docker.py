@@ -6,6 +6,7 @@ import requests
 from tqdm import tqdm
 import os
 from urllib.parse import urlparse
+from setup import run_command
 
 # Updated Dockerfile content to use Python 3.12 and a unique user
 DOCKERFILE_CONTENT = """
@@ -29,6 +30,33 @@ WORKDIR /home/${USER_NAME}
 
 USER ${USER_NAME}
 """
+
+def verify_docker():
+    system = platform.system()
+    print("\nVerifying Docker daemon connectivity after installation...")
+    max_retries = 6
+    retry_delay = 5 # seconds
+    for i in range(max_retries):
+        try:
+            # Use a simple command like 'docker info' which requires daemon connection
+            a = run_command(["docker", "info"], False)
+            if a:
+                print("Docker daemon is running and responding.")
+                return True # Success! Docker is ready.
+            # FileNotFoundError should ideally not happen here if install succeeded, but check anyway
+            print(f"Waiting for Docker daemon... ({i+1}/{max_retries})")
+            if i < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                print("Could not connect to Docker daemon after installation attempts.", file=sys.stderr)
+                if system == "Linux":
+                    print("Check Docker service status: sudo systemctl status docker", file=sys.stderr)
+                    print("Check user permissions (are you in the 'docker' group? did you log out/in?)", file=sys.stderr)
+                elif system == "Darwin" or system == "Windows":
+                    print("Ensure Docker Desktop is running.", file=sys.stderr)
+                return False # Indicate failure
+        except Exception as e:
+            print(f"An error occurred while trying to verify Docker! {e}")
 
 def download_file_with_progress(url: str, local_filename: str=None, chunk_size: int=8192):
     """
@@ -97,36 +125,6 @@ def download_file_with_progress(url: str, local_filename: str=None, chunk_size: 
     except Exception as e:
         print(f"\nAn unexpected error occurred: {e}")
 
-def run_command(command: list[str] | str, shell: bool=False, check: bool=True, capture_output: bool=False):
-    """Helper function to run subprocess commands with better error reporting."""
-    cmd_str = ' '.join(command) if isinstance(command, list) else command
-    print(f"Running command: {cmd_str}")
-    try:
-        # Using text=True for automatic decoding, capture_output implies stdout/stderr capture
-        result = subprocess.run(command, shell=shell, check=check, text=True,
-                                capture_output=capture_output or not check) # Capture if not checking or explicitly asked
-        if capture_output:
-            if result.stdout:
-                print(result.stdout.strip())
-            if result.stderr:
-                print(f"Stderr: {result.stderr.strip()}", file=sys.stderr)
-        return result
-    except subprocess.CalledProcessError as e:
-        print(f"Error running command: {cmd_str}", file=sys.stderr)
-        print(f"Return code: {e.returncode}", file=sys.stderr)
-        # Error details are often in stderr even when capture_output=False
-        if e.stdout:
-            print(f"Stdout: {e.stdout.strip()}", file=sys.stderr)
-        if e.stderr:
-            print(f"Stderr: {e.stderr.strip()}", file=sys.stderr)
-        raise # Re-raise the exception to stop execution
-    except FileNotFoundError:
-        cmd_name = command[0] if isinstance(command, list) else command.split()[0]
-        print(f"Error: Command '{cmd_name}' not found.", file=sys.stderr)
-        print("Please ensure the necessary tools (like docker, sudo, curl, apt-get, yum, brew etc.) are installed and in your PATH.", file=sys.stderr)
-        raise
-
-
 def get_linux_distro():
     """Attempts to identify the Linux distribution using /etc/os-release."""
     try:
@@ -156,20 +154,14 @@ def install_docker():
     system = platform.system()
 
     # Check if Docker is already installed and runnable
-    try:
-        run_command(["docker", "--version"], capture_output=True)
-        # Check if docker daemon is responding
-        run_command(["docker", "info"], capture_output=True)
+    x = run_command(["docker", "--version"])
+    y = run_command(["docker", "info"])
+    if x and y:
         print("Docker is already installed and the daemon is running.")
         return True # Indicate Docker is ready
-    except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        if isinstance(e, FileNotFoundError):
-            print("Docker command not found. Attempting installation...")
-        else:
-             print("Docker command found, but daemon is not responding or user lacks permissions.")
-             print("Attempting installation/configuration steps...")
-        # Proceed with installation attempt
 
+    print("Docker command not found. Attempting installation...")
+    print("Attempting installation/configuration steps...")
     try:
         if system == "Linux":
             distro_id, distro_like = get_linux_distro()
@@ -191,11 +183,11 @@ def install_docker():
                 repo_setup_done = True
 
             # Fedora
-            elif distro_id == "fedora" or "fedora" in distro_like:
-                print("Configuring Docker repository for Fedora...")
+            elif distro_id == "fedora" or distro_id == "rocky" or "fedora" in distro_like:
+                print("Configuring Docker repository for Fedora and Rocky Linux...")
                 install_cmds = [
                     "sudo dnf -y install dnf-plugins-core",
-                    "sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo",
+                    "sudo dnf-3 config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo",
                 ]
                 package_install_cmd = "sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
                 repo_setup_done = True
@@ -215,47 +207,68 @@ def install_docker():
                 print("Manual Docker installation is recommended: https://docs.docker.com/engine/install/", file=sys.stderr)
                 return False # Indicate installation likely failed
 
+            a = False
             if repo_setup_done:
                 for cmd in install_cmds:
-                    run_command(cmd, shell=True)
+                    a = run_command(cmd)
                 print("Installing Docker packages...")
-                run_command(package_install_cmd, shell=True)
+                b = run_command(package_install_cmd)
 
                 print("Starting and enabling Docker service...")
-                run_command("sudo systemctl start docker", shell=True)
-                run_command("sudo systemctl enable docker", shell=True)
+                c = run_command("sudo systemctl start docker")
+                d = run_command("sudo systemctl enable docker")
 
-                print("Configuring Docker group (optional)...")
+                e = False
+                print("Configuring Docker group")
                 try:
-                    current_user = os.environ.get('SUDO_USER', os.getlogin()) # Get user who ran sudo or current user
+                    e = current_user = os.environ.get('SUDO_USER', os.getlogin()) # Get user who ran sudo or current user
                     run_command(["sudo", "usermod", "-aG", "docker", current_user])
                     print(f"Added user '{current_user}' to the 'docker' group.")
                     print("IMPORTANT: You MUST log out and log back in for this group change to take effect.")
                     print("Alternatively, you can run 'newgrp docker' in your current shell (may have side effects).")
                 except Exception as group_err:
-                    print(f"Warning: Could not add user to docker group: {group_err}", file=sys.stderr)
-                    print("You may need to run 'docker' commands with 'sudo' or manually configure permissions.", file=sys.stderr)
+                    print(
+                        f"Warning: Could not add user to docker group: {group_err}",
+                        file=sys.stderr,
+                    )
+                    print(
+                        "You may need to run 'docker' commands with 'sudo' or manually configure permissions.",
+                        file=sys.stderr,
+                    )
+
+                if not a and b and c and d and e:
+                    print(
+                        "\n--- An error occurred during the Docker setup process ---",
+                        file=sys.stderr,
+                    )
+                    print("Docker setup failed.", file=sys.stderr)
+                    return False # Indicate failure
+
 
             else: # Should not happen if logic is correct, but as a safeguard
                  return False
 
-        elif system == "Darwin":  # macOS
+        elif system == "Darwin":
             print("Checking for Homebrew...")
             try:
-                run_command(["brew", "--version"], capture_output=True)
+                a = run_command(["brew", "--version"])
                 print("Homebrew found. Installing/updating Docker Desktop via Homebrew...")
                 # `brew install` will update if already installed
-                run_command(["brew", "install", "--cask", "docker"])
+                b = run_command(["brew", "install", "--cask", "docker"])
                 print("Docker Desktop installation/update initiated via Homebrew.")
                 print("Please follow any on-screen prompts from Docker Desktop itself.")
                 print("You may need to start Docker Desktop manually after installation.")
                 # Note: We can't easily wait for the GUI app to be ready from here.
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                print("Homebrew not found or 'brew install' failed.", file=sys.stderr)
-                print("Please download and install Docker Desktop for Mac manually from:", file=sys.stderr)
-                print("https://docs.docker.com/desktop/mac/install/", file=sys.stderr)
-                print("Ensure Docker Desktop is running, then run this script again.", file=sys.stderr)
-                return False # Indicate manual step needed
+
+                if not a and b:
+                    print("Homebrew not found or 'brew install' failed.", file=sys.stderr)
+                    print("Please download and install Docker Desktop for Mac manually from:", file=sys.stderr)
+                    print("https://docs.docker.com/desktop/mac/install/", file=sys.stderr)
+                    print("Ensure Docker Desktop is running, then run this script again.", file=sys.stderr)
+                    return False # Indicate manual step needed
+
+            except Exception as e:
+                print(f"Installing Docker on MacOS failed! {e}")
 
         elif system == "Windows":
             download_url_windows = 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe'
@@ -271,44 +284,14 @@ def install_docker():
             print("Manual Docker installation is required.", file=sys.stderr)
             return False # Indicate failure
 
-        # --- Verification Step after Installation ---
-        print("\nVerifying Docker daemon connectivity after installation...")
-        max_retries = 6
-        retry_delay = 5 # seconds
-        for i in range(max_retries):
-            try:
-                # Use a simple command like 'docker info' which requires daemon connection
-                run_command(["docker", "info"], capture_output=True)
-                print("Docker daemon is running and responding.")
-                return True # Success! Docker is ready.
-            except (subprocess.CalledProcessError, FileNotFoundError) as docker_err:
-                # FileNotFoundError should ideally not happen here if install succeeded, but check anyway
-                print(f"Waiting for Docker daemon... ({i+1}/{max_retries})")
-                if i < max_retries - 1:
-                    time.sleep(retry_delay)
-                else:
-                    print("Could not connect to Docker daemon after installation attempts.", file=sys.stderr)
-                    print(f"Error details: {docker_err}", file=sys.stderr)
-                    if system == "Linux":
-                        print("Check Docker service status: sudo systemctl status docker", file=sys.stderr)
-                        print("Check user permissions (are you in the 'docker' group? did you log out/in?)", file=sys.stderr)
-                    elif system == "Darwin" or system == "Windows":
-                        print("Ensure Docker Desktop is running.", file=sys.stderr)
-                    return False # Indicate failure
-
-    except (subprocess.CalledProcessError, FileNotFoundError, Exception) as e:
-        print("\n--- An error occurred during the Docker setup process ---", file=sys.stderr)
-        # run_command already prints details for subprocess errors
-        if not isinstance(e, (subprocess.CalledProcessError, FileNotFoundError)):
-             print(f"Error details: {e}", file=sys.stderr) # Print other exceptions
-        print("Docker setup failed.", file=sys.stderr)
-        return False # Indicate failure
+        verify_docker()
 
     finally:
         try:
             os.remove('./temp/docker_installer.exe')
             print("Removed docker_installer.exe")
         except FileNotFoundError:
+            print("docker_installer not found. It means that you're not running Windows.")
             pass
 
 
@@ -327,18 +310,30 @@ def build_docker_image():
         # Build the image
         # Note: On Linux, this might require sudo or the user to be in the 'docker' group
         print("\n--- Docker Build Output ---")
-        run_command(["docker", "build", "--no-cache", "-t", image_name, "-f", dockerfile_path, "."]) # Added --no-cache for robustness
+        if not run_command(
+            [
+                "docker",
+                "build",
+                "--no-cache",
+                "-t",
+                image_name,
+                "-f",
+                dockerfile_path,
+                ".",
+            ]
+        ):
+            print("--- End Docker Build Output. ERROR! ---")
+            print(f"\nError building Docker image '{image_name}'.")
+            print("1. Is the Docker daemon running?")
+            print("2. Do you have permissions to interact with the Docker daemon?")
+            print("Docker installation failed.")
+            print("(On Linux, try running this script with 'sudo', or log out/in if added to 'docker' group).")
+            return False
+
         print("--- End Docker Build Output ---")
         print(f"\nDocker image '{image_name}' built successfully.")
         return True # Indicate success
 
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        print(f"\nError building Docker image '{image_name}'.", file=sys.stderr)
-        print("Please check the following:", file=sys.stderr)
-        print("1. Is the Docker daemon running?", file=sys.stderr)
-        print("2. Do you have permissions to interact with the Docker daemon?", file=sys.stderr)
-        print("   (On Linux, try running this script with 'sudo', or log out/in if added to 'docker' group).", file=sys.stderr)
-        return False
     except Exception as e:
          print(f"\nAn unexpected error occurred during image build: {e}", file=sys.stderr)
          return False
@@ -355,6 +350,10 @@ def build_docker_image():
 
 if __name__ == "__main__":
     print("--- Starting Docker Setup and Sandbox Image Build ---")
+    
+    if verify_docker():
+        print("Docker is already installed, no need to continue.")
+        sys.exit(0)
 
     docker_ready = install_docker()
 
@@ -365,9 +364,8 @@ if __name__ == "__main__":
         sys.exit(1) # Exit if Docker isn't ready
 
     print("\n--- Docker Ready - Proceeding to Image Build ---")
-    build_success = build_docker_image()
 
-    if build_success:
+    if build_docker_image():
         print("\n--- Setup Complete ---")
         print(f"The Docker image '{'python-sandbox-image'}' using Python 3.12 is ready.")
         sys.exit(0) # Success

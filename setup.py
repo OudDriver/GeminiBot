@@ -29,23 +29,27 @@ def _stream_reader(stream, queue_obj, label):
         except IOError:
             pass # Stream might already be closed
 
-def run_command(cmd_list: list[str] | str):
+def run_command(cmd_list: list[str] | str, admin: bool=True):
     """
     Runs a command using subprocess.Popen for real-time output.
     Prepends sudo if the script is not run as root.
     Prints stdout/stderr as it arrives.
     Returns True on success (exit code 0), False on failure.
     """
+    starts_with_sudo = False
     if type(cmd_list) is str:
+        if not cmd_list.startswith('sudo'):
+            starts_with_sudo = True
         cmd_list = cmd_list.split(' ')
 
     if os.geteuid() != 0:
-        if shutil.which("sudo"):
+        if shutil.which("sudo") and not starts_with_sudo and admin:
             cmd_list = ["sudo"] + cmd_list
         else:
-            print("Error: Not running as root and 'sudo' command not found.", file=sys.stderr)
-            print("Please run this script as root or install sudo.", file=sys.stderr)
-            return False
+            if admin:
+                print("Error: Not running as root and 'sudo' command not found.", file=sys.stderr)
+                print("Please run this script as root or install sudo.", file=sys.stderr)
+                return False
 
     print(f"--- Running command: {' '.join(cmd_list)}")
     process = None # Initialize process to None
@@ -144,13 +148,16 @@ def run_command(cmd_list: list[str] | str):
 
 
 if __name__ == "__main__":
-    install_command = run_command("python install_cmake.py".split(" "))
+    cmake_command = run_command("python3.12 install_cmake.py".split(" "), False)
+    print(f"Command returned: {cmake_command}")
+
+    install_command = run_command("pip3.12 install -r requirements.txt".split(" "), False)
     print(f"Command returned: {install_command}")
 
-    install_command = run_command("pip install -r requirements.txt".split(" "))
-    print(f"Command returned: {install_command}")
-
-    docker_command = run_command("python install_docker.py".split(" "))
+    docker_command = run_command("python3.12 install_docker.py".split(" "), False)
     print(f"Docker command exited with code {docker_command}")
+    
+    latex_command = run_command("python3.12 install_docker.py".split(" "), False)
+    print(f"LaTeX command exited with code {latex_command}")
 
     print("Review any errors and run main.py!")

@@ -31,6 +31,33 @@ WORKDIR /home/${USER_NAME}
 USER ${USER_NAME}
 """
 
+def verify_docker():
+    system = platform.system()
+    print("\nVerifying Docker daemon connectivity after installation...")
+    max_retries = 6
+    retry_delay = 5 # seconds
+    for i in range(max_retries):
+        try:
+            # Use a simple command like 'docker info' which requires daemon connection
+            a = run_command(["docker", "info"], False)
+            if a:
+                print("Docker daemon is running and responding.")
+                return True # Success! Docker is ready.
+            # FileNotFoundError should ideally not happen here if install succeeded, but check anyway
+            print(f"Waiting for Docker daemon... ({i+1}/{max_retries})")
+            if i < max_retries - 1:
+                time.sleep(retry_delay)
+            else:
+                print("Could not connect to Docker daemon after installation attempts.", file=sys.stderr)
+                if system == "Linux":
+                    print("Check Docker service status: sudo systemctl status docker", file=sys.stderr)
+                    print("Check user permissions (are you in the 'docker' group? did you log out/in?)", file=sys.stderr)
+                elif system == "Darwin" or system == "Windows":
+                    print("Ensure Docker Desktop is running.", file=sys.stderr)
+                return False # Indicate failure
+        except Exception as e:
+            print(f"An error occurred while trying to verify Docker! {e}")
+
 def download_file_with_progress(url: str, local_filename: str=None, chunk_size: int=8192):
     """
     Downloads a file from a URL showing a progress bar.
@@ -156,11 +183,11 @@ def install_docker():
                 repo_setup_done = True
 
             # Fedora
-            elif distro_id == "fedora" or "fedora" in distro_like:
-                print("Configuring Docker repository for Fedora...")
+            elif distro_id == "fedora" or distro_id == "rocky" or "fedora" in distro_like:
+                print("Configuring Docker repository for Fedora and Rocky Linux...")
                 install_cmds = [
                     "sudo dnf -y install dnf-plugins-core",
-                    "sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo",
+                    "sudo dnf-3 config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo",
                 ]
                 package_install_cmd = "sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
                 repo_setup_done = True
@@ -257,37 +284,7 @@ def install_docker():
             print("Manual Docker installation is required.", file=sys.stderr)
             return False # Indicate failure
 
-        # --- Verification Step after Installation ---
-        print("\nVerifying Docker daemon connectivity after installation...")
-        max_retries = 6
-        retry_delay = 5 # seconds
-        for i in range(max_retries):
-            try:
-                # Use a simple command like 'docker info' which requires daemon connection
-                a = run_command(["docker", "info"])
-                if a:
-                    print("Docker daemon is running and responding.")
-                    return True # Success! Docker is ready.
-                # FileNotFoundError should ideally not happen here if install succeeded, but check anyway
-                print(f"Waiting for Docker daemon... ({i+1}/{max_retries})")
-                if i < max_retries - 1:
-                    time.sleep(retry_delay)
-                else:
-                    print("Could not connect to Docker daemon after installation attempts.", file=sys.stderr)
-                    if system == "Linux":
-                        print("Check Docker service status: sudo systemctl status docker", file=sys.stderr)
-                        print("Check user permissions (are you in the 'docker' group? did you log out/in?)", file=sys.stderr)
-                    elif system == "Darwin" or system == "Windows":
-                        print("Ensure Docker Desktop is running.", file=sys.stderr)
-                    return False # Indicate failure
-            except Exception as e:
-                print(f"An error occurred while trying to verify Docker! {e}")
-
-    except Exception as e:
-        print("\n--- An error occurred during the Docker setup process ---", file=sys.stderr)
-        print(e)
-        print("Docker setup failed.", file=sys.stderr)
-        return False # Indicate failure
+        verify_docker()
 
     finally:
         try:
@@ -353,6 +350,10 @@ def build_docker_image():
 
 if __name__ == "__main__":
     print("--- Starting Docker Setup and Sandbox Image Build ---")
+    
+    if verify_docker():
+        print("Docker is already installed, no need to continue.")
+        sys.exit(0)
 
     docker_ready = install_docker()
 

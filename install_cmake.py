@@ -183,7 +183,7 @@ def verify_installation():
     cmake_path = shutil.which("cmake")
     if cmake_path:
         print(f"CMake executable found at: {cmake_path}")
-        return run_command(["cmake", "--version"])
+        return run_command(["cmake", "--version"], False)
     else:
         print("Error: 'cmake' command not found in PATH after installation attempt.", file=sys.stderr)
         return False
@@ -192,6 +192,10 @@ def verify_installation():
 if __name__ == "__main__":
     print("Starting CMake installation script...")
 
+    if verify_installation():
+        print("CMake already installed, no need to continue.")
+        sys.exit(0)
+    
     # Warn if running as root directly
     if os.geteuid() == 0:
         print("\nWarning: Running script as root.", file=sys.stderr)

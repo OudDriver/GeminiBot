@@ -1,8 +1,6 @@
-
 import json
 import logging
 import os
-import sys
 
 from google import genai
 from google.genai.types import GoogleSearch, ToolCodeExecution, Tool
@@ -22,19 +20,20 @@ def setup_logging():
     """Configures logging to file and console."""
     # Define log format
     log_format = '%(asctime)s - %(levelname)s - %(name)s - %(filename)s:%(lineno)d - %(message)s'
-    formatter = logging.Formatter(log_format)
+    formatter = logging.Formatter(log_format, datefmt='%Y-%m-%d %H:%M:%S')
 
     # Get the root logger
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO) # Set the minimum level for the root logger
+    logger.setLevel(logging.INFO)
 
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
         handler.close()
+
     try:
         file_handler = logging.FileHandler("bot.log", encoding='utf-8')
         file_handler.setFormatter(formatter)
-        file_handler.setLevel(logging.INFO) # Set level for this specific handler
+        file_handler.setLevel(logging.DEBUG)
         logger.addHandler(file_handler)
     except Exception as e:
         print(f"Error setting up file logging: {e}") # Basic error print if file handler fails
@@ -42,11 +41,10 @@ def setup_logging():
     # --- Console (Stream) Handler ---
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
-    stream_handler.setLevel(logging.INFO) # Set level for this specific handler
+    stream_handler.setLevel(logging.INFO)
     logger.addHandler(stream_handler)
 
-    # Now log the setup message using the configured root logger
-    logging.info("Set up logging.") # Use logging.info which uses the root logger
+    logging.info("Set up logging.")
 
 def setup_gemini(api_key):
     """Configures the Google Gemini API client."""
@@ -90,7 +88,7 @@ def get_initial_state(config):
         os.makedirs("./temp")
 
     with open(temp_config_path, "w") as f:
-        json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status, "thought": "", "secret": []}, f)
+        json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status, "thought": "", "secret": [], "tools_history": []}, f)
 
     return {
         "system_prompts": system_prompts,

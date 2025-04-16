@@ -21,19 +21,23 @@ import docker.errors
 
 nest_asyncio.apply()
 
+
 def generate_unique_file_name(extension: str):
     """
     Generates a unique filename using the current timestamp and a random string.
     """
     timestamp = int(time.time())
-    random_str = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+    random_str = "".join(random.choices(string.ascii_letters + string.digits, k=8))
     return f"{timestamp}_{random_str}.{extension}"
 
+
 def replace_sub(m):
-    return ''.join(subscript_map.get(c, c) for c in m.group(1))
+    return "".join(subscript_map.get(c, c) for c in m.group(1))
+
 
 def replace_sup(m):
-     return ''.join(superscript_map.get(c, c) for c in m.group(1))
+    return "".join(superscript_map.get(c, c) for c in m.group(1))
+
 
 def clean_text(text: str):
     """
@@ -46,8 +50,8 @@ def clean_text(text: str):
         The string with the tags replaced by subscript and superscript characters.
     """
 
-    text = regex.sub(r'<sub>(.*?)</sub>', replace_sub, text)
-    text = regex.sub(r'<sup>(.*?)</sup>', replace_sup, text)
+    text = regex.sub(r"<sub>(.*?)</sub>", replace_sub, text)
+    text = regex.sub(r"<sup>(.*?)</sup>", replace_sup, text)
 
     thought_matches = regex.findall(r"<thought>[\s\S]*?</thought>", text)
     secret_matches = regex.findall(r"<store>[\s\S]*?</store>", text)
@@ -56,22 +60,25 @@ def clean_text(text: str):
 
     return text, thought_matches, secret_matches
 
+
 async def send_long_message(ctx, message, length):
     """Sends a long message in chunks, splitting at the nearest space within the length limit."""
     start = 0
     while start < len(message):
         end = min(start + length, len(message))
         if end < len(message):
-            last_space = message.rfind(' ', start, end)
+            last_space = message.rfind(" ", start, end)
             if last_space != -1:
-                end = last_space  
+                end = last_space
 
         await ctx.reply(message[start:end])
-        start = end + 1  
+        start = end + 1
+
 
 async def send_image(ctx, file_name):
     """Sends an image from a path."""
     await ctx.reply(file=discord.File(file_name))
+
 
 async def send_long_messages(ctx, messages, length):
     """Sends a long list of message in chunks, splitting at the nearest space within the length limit."""
@@ -83,13 +90,16 @@ async def send_long_messages(ctx, messages, length):
         elif isinstance(message, discord.File):
             await ctx.reply(file=message)
 
+
 def reply(message: str):
     async def _reply(msg):
         from commands.prompt import ctx_glob
+
         await ctx_glob.reply(msg)
 
     loop = asyncio.get_running_loop()
     loop.run_until_complete(_reply(message))
+
 
 def start_docker_daemon():
     """
@@ -104,9 +114,13 @@ def start_docker_daemon():
 
     try:
         if os_name == "Linux":
-            subprocess.run(['sudo', 'docker', 'info'], check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["sudo", "docker", "info"], check=True, capture_output=True, text=True
+            )
         else:
-            subprocess.run(['docker', 'info'], check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["docker", "info"], check=True, capture_output=True, text=True
+            )
         logging.info("Docker is already running.")
         return True
 
@@ -115,16 +129,30 @@ def start_docker_daemon():
 
         try:
             if os_name == "Windows":
-                docker_desktop_path = r"C:\Program Files\Docker\Docker\Docker Desktop.exe"
-                subprocess.run([docker_desktop_path], check=True, capture_output=True, text=True)
+                docker_desktop_path = (
+                    r"C:\Program Files\Docker\Docker\Docker Desktop.exe"
+                )
+                subprocess.run(
+                    [docker_desktop_path], check=True, capture_output=True, text=True
+                )
                 logging.info("Docker started on Windows.")
                 return True
             elif os_name == "Linux":
-                subprocess.run(['sudo', 'systemctl', 'start', 'docker'], check=True, capture_output=True, text=True)
+                subprocess.run(
+                    ["sudo", "systemctl", "start", "docker"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
                 logging.info("Docker started on Linux.")
                 return True
             elif os_name == "Darwin":  # macOS
-                subprocess.run(['open', '/Applications/Docker.app'], check=True, capture_output=True, text=True)
+                subprocess.run(
+                    ["open", "/Applications/Docker.app"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
                 logging.info("Docker started on macOS.")
                 return True
             else:
@@ -140,6 +168,7 @@ def start_docker_daemon():
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
             return False
+
 
 def execute_code(code_string: str) -> str | None:
     """Executes Python code. Times out in 5 seconds.
@@ -157,7 +186,6 @@ def execute_code(code_string: str) -> str | None:
     image_name = "python-sandbox-image"  # Make image name a variable
     client = None
 
-
     try:
         try:
             client = docker.from_env()
@@ -173,6 +201,13 @@ def execute_code(code_string: str) -> str | None:
                 "Please ensure Docker Desktop (or the Docker daemon service) "
                 "is running and responsive."
             )
+            save_temp_config(
+                tool_use={
+                    "name": "Execute Code (Error)",
+                    "input": code_string,
+                    "output": reply_msg,
+                }
+            )
             reply(reply_msg)
             return reply_msg  # Return early, cannot proceed
         except docker.errors.DockerException as e:
@@ -181,11 +216,25 @@ def execute_code(code_string: str) -> str | None:
             logging.error(log_msg)
             reply_msg = f"Error initializing Docker client: {e}. Is Docker installed correctly and the service running?"
             reply(reply_msg)
+            save_temp_config(
+                tool_use={
+                    "name": "Execute Code (Error)",
+                    "input": code_string,
+                    "output": reply_msg,
+                }
+            )
             return reply_msg  # Return early
         except Exception as e:  # Catch any other unexpected error during init/ping
             log_msg = f"Unexpected error initializing Docker or pinging daemon: {traceback.format_exc()}"
             logging.error(log_msg)
             reply_msg = f"Unexpected error connecting to Docker: {e}"
+            save_temp_config(
+                tool_use={
+                    "name": "Execute Code (Error)",
+                    "input": code_string,
+                    "output": reply_msg,
+                }
+            )
             reply(reply_msg)
             return reply_msg  # Return early
 
@@ -199,21 +248,43 @@ def execute_code(code_string: str) -> str | None:
                 f"Error: The required Docker image '{image_name}' was not found locally. "
                 f"Please build or pull the image before running the code execution."
             )
+            save_temp_config(
+                tool_use={
+                    "name": "Execute Code (Error)",
+                    "input": code_string,
+                    "output": reply_msg,
+                }
+            )
             reply(reply_msg)
             return reply_msg
         except docker.errors.APIError as e:
             log_msg = f"Docker API Error checking for image '{image_name}': {traceback.format_exc()}"
             logging.error(log_msg)
             reply_msg = f"Error checking for Docker image '{image_name}': {e}"
+            save_temp_config(
+                tool_use={
+                    "name": "Execute Code (Error)",
+                    "input": code_string,
+                    "output": reply_msg,
+                }
+            )
             reply(reply_msg)
             return reply_msg
 
-        container = client.containers.run("python-sandbox-image", command=["python", "-c", code_string], detach=True,
-                                          mem_limit="128m", cpu_shares=102, name=container_name, network_disabled=True,
-                                          read_only=True, stderr=True)
+        container = client.containers.run(
+            "python-sandbox-image",
+            command=["python", "-c", code_string],
+            detach=True,
+            mem_limit="128m",
+            cpu_shares=102,
+            name=container_name,
+            network_disabled=True,
+            read_only=True,
+            stderr=True,
+        )
 
         result = container.wait(timeout=timeout_seconds)
-        exit_code = result.get('StatusCode', -1)  # Default to -1 if key missing
+        exit_code = result.get("StatusCode", -1)  # Default to -1 if key missing
 
         # Capture output (stdout and stderr)
         output = container.logs().decode(errors="replace")
@@ -222,32 +293,77 @@ def execute_code(code_string: str) -> str | None:
             # Append error message if the container exited abnormally
             output += f"\nERROR: Container exited with status code: {exit_code}"
 
-        final = f"Code:\n```py\n{encoded_string}\n```\nOutput:\n```\n{output.strip()}\n```"
+        final = (
+            f"Code:\n```py\n{encoded_string}\n```\nOutput:\n```\n{output.strip()}\n```"
+        )
         logging.info(final)
         reply(final)
+
+        save_temp_config(
+            tool_use={
+                "name": "Execute Code",
+                "input": code_string,
+                "output": final,
+            }
+        )
 
         return output.strip()
 
     except docker.errors.ContainerError as e:
         logging.error(f"Container Error: {traceback.format_exc()}")
+        save_temp_config(
+            tool_use={
+                "name": "Execute Code (Error)",
+                "input": code_string,
+                "output": f"Container Error: {e}",
+            }
+        )
         reply(f"Container Error: {e}")
         return f"Container Error: {e}"
     except docker.errors.ImageNotFound as e:
         logging.error(f"Image Not Found Error: {traceback.format_exc()}")
+        save_temp_config(
+            tool_use={
+                "name": "Execute Code (Error)",
+                "input": code_string,
+                "output": f"Image Not Found Error: {e}",
+            }
+        )
         reply(f"Image Not Found Error: {e}")
         return f"Image Not Found Error: {e}"
     except docker.errors.APIError as e:
         logging.error(f"Docker API Error: {traceback.format_exc()}")
+        save_temp_config(
+            tool_use={
+                "name": "Execute Code (Error)",
+                "input": code_string,
+                "output": f"Docker API Error: {e}",
+            }
+        )
         reply(f"Docker API Error: {e}")
         return f"Docker API Error: {e}"
     except requests.exceptions.ConnectionError as e:
         log_msg = f"Docker Daemon Connection Error (likely timeout during wait): {traceback.format_exc()}"
         logging.error(log_msg)
+        save_temp_config(
+            tool_use={
+                "name": "Execute Code (Error)",
+                "input": code_string,
+                "output": f"Docker API Error: {e}",
+            }
+        )
         reply_msg = f"Error communicating with Docker: {e}. It might be slow or unresponsive or it timed out."
         reply(reply_msg)
         return reply_msg
     except Exception as e:
         logging.error(f"An unexpected error: {traceback.format_exc()}")
+        save_temp_config(
+            tool_use={
+                "name": "Execute Code (Error)",
+                "input": code_string,
+                "output": f"An unexpected error: {e}",
+            }
+        )
         reply(f"An unexpected error: {e}")
         return f"An unexpected error: {e}"
     finally:
@@ -256,6 +372,7 @@ def execute_code(code_string: str) -> str | None:
             container.remove(force=True)  # Make sure it is cleaned up
         except Exception:
             pass
+
 
 def create_grounding_markdown(candidates: list[Candidate]):
     """
@@ -283,6 +400,7 @@ def create_grounding_markdown(candidates: list[Candidate]):
 
     return markdown_string
 
+
 def check_message_empty(message: str) -> bool:
     if not message:
         return True
@@ -296,12 +414,21 @@ def check_message_empty(message: str) -> bool:
 
     return False
 
+
 def repair_links(link: str):
-    if not regex.search(r'^http', link):
+    if not regex.search(r"^http", link):
         return "https://" + link
     return link
 
-def save_temp_config(model: str | None=None, system_prompt_data: str | None=None, current_uwu_status: str | None=None, thought: list | None=None, secret: list | None=None):
+
+def save_temp_config(
+    model: str | None = None,
+    system_prompt_data: str | None = None,
+    current_uwu_status: str | None = None,
+    thought: list | None = None,
+    secret: list | str | None = None,
+    tool_use: dict | None = None,
+):
     """Saves the current configuration to temp_config.json.
 
     If an argument is None, uses the existing value from the file (if it exists).
@@ -317,29 +444,77 @@ def save_temp_config(model: str | None=None, system_prompt_data: str | None=None
     # Update configuration, handling 'secret' specially.
     new_config = {
         "model": model if model is not None else existing_config.get("model", None),
-        "system_prompt": system_prompt_data if system_prompt_data is not None else existing_config.get("system_prompt", None),
-        "uwu": current_uwu_status if current_uwu_status is not None else existing_config.get("uwu", None),
-        "thought": thought if thought is not None else existing_config.get("thought", None)
+        "system_prompt": system_prompt_data
+        if system_prompt_data is not None
+        else existing_config.get("system_prompt", None),
+        "uwu": current_uwu_status
+        if current_uwu_status is not None
+        else existing_config.get("uwu", None),
+        "thought": thought
+        if thought is not None
+        else existing_config.get("thought", None),
+        "secret": [],
+        "tools_history": [],
     }
 
     # Handle 'secret' (append to the list, or create a new list)
     if secret is not None:
-        existing_secrets = existing_config.get("secret", [])  # Get existing list, default to empty list
+        existing_secrets = existing_config.get(
+            "secret", []
+        )  # Get existing list, default to empty list
         if isinstance(existing_secrets, list):
             if isinstance(secret, list):
-                new_config["secret"] = existing_secrets + secret # append the list
+                new_config["secret"] = existing_secrets + secret  # append the list
             else:
-                new_config["secret"] = existing_secrets + [secret]  # Append the new secret
+                new_config["secret"] = existing_secrets + [
+                    secret
+                ]  # Append the new secret
         else:
             # Handle the case where 'secret' exists but is not a list.
             # We'll overwrite it with a new list containing the provided secret.
             if isinstance(secret, list):
-                 new_config["secret"] = secret
+                new_config["secret"] = secret
             else:
                 new_config["secret"] = [secret]
     else:
-        new_config["secret"] = existing_config.get("secret", None) # keep it as is
+        new_config["secret"] = existing_config.get("secret", None)  # keep it as is
 
+        # Handle 'secret' (append to the list, or create a new list)
+        if secret is not None:
+            existing_secrets = existing_config.get(
+                "secret", []
+            )  # Get existing list, default to empty list
+            if isinstance(existing_secrets, list):
+                if isinstance(secret, list):
+                    new_config["secret"] = existing_secrets + secret  # append the list
+                else:
+                    new_config["secret"] = existing_secrets + [
+                        secret
+                    ]  # Append the new secret
+            else:
+                # Handle the case where 'secret' exists but is not a list.
+                # We'll overwrite it with a new list containing the provided secret.
+                if isinstance(secret, list):
+                    new_config["secret"] = secret
+                else:
+                    new_config["secret"] = [secret]
+        else:
+            new_config["secret"] = existing_config.get("secret", None)  # keep it as is
+
+        # Handle 'tools_history' (append to the list, or create a new list)
+        if tool_use is not None:
+            if tool_use != {}:
+                existing_history = existing_config.get("tools_history", [])
+                if isinstance(existing_history, list):
+                    new_config["tools_history"].append(tool_use)
+                else:
+                    new_config["tools_history"] = [tool_use]
+            else:
+                new_config["tools_history"] = []
+
+
+        else:
+            new_config["tools_history"] = existing_config.get("tools_history", None)
     # Save the updated configuration
     with open(temp_config_path, "w") as f:
         json.dump(new_config, f)

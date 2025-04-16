@@ -1,4 +1,3 @@
-import ssl
 import json
 from datetime import datetime, timezone
 import traceback
@@ -12,6 +11,7 @@ from google.genai.types import GenerateContentConfig, SafetySetting, Part,\
     AutomaticFunctionCallingConfig, HarmCategory, FinishReason, FileData, \
     Tool
 from google.genai import Client
+from google.genai import errors
 
 from bot.setup import load_config
 from packages.utils import clean_text, create_grounding_markdown, send_long_messages, \
@@ -32,6 +32,18 @@ latest_token_count = 0
 ctx_glob = None
 memory = []
 
+def save_memory(history):
+    global memory
+    memory = history
+
+def clear_memory():
+    global memory
+    memory.clear()
+
+def get_memory():
+    global memory
+    return memory
+
 def prompt(tools: list[Tool], genai_client: Client):
     async def command(ctx: commands.Context): 
         """
@@ -40,19 +52,13 @@ def prompt(tools: list[Tool], genai_client: Client):
         Args:
             ctx: The context of the command invocation
         """
-        global ctx_glob, memory, latest_token_count
+        global ctx_glob, latest_token_count
         try:
+            curr_memory = get_memory()
             is_reply_to_bot = False
             if ctx.message.reference:
-                try:
-                    replied_message = await ctx.fetch_message(ctx.message.reference.message_id)
-                    is_reply_to_bot = replied_message.author.id == ctx.bot.user.id
-                except discord.NotFound:
-                    logging.warning(f"Referenced message not found (ID: {ctx.message.reference.message_id}).")
-                except discord.HTTPException as e:
-                    logging.error(f"HTTP Error fetching referenced message: {e}")
-                    await ctx.send(f"Error fetching referenced message: {e}")
-                    return
+                replied_message = await ctx.fetch_message(ctx.message.reference.message_id)
+                is_reply_to_bot = replied_message.author.id == ctx.bot.user.id
 
             is_mention = ctx.message.mentions and ctx.bot.user in ctx.message.mentions
 
@@ -117,7 +123,8 @@ def prompt(tools: list[Tool], genai_client: Client):
             async with ctx.typing():
                 if message.lower() == "{clear}":
                     if ctx.author.guild_permissions.administrator:
-                        memory.clear()
+                        clear_memory()
+                        save_temp_config(tool_use={})
                         await ctx.reply("Alright, I have cleared my context. What are we gonna talk about?")
                         logging.info("Cleared Context")
                         return
@@ -125,9 +132,9 @@ def prompt(tools: list[Tool], genai_client: Client):
                         await ctx.reply("You don't have the necessary permissions for this!", ephemeral=True)
                         return
                 
-                if memory:
+                if curr_memory:
                     chat = genai_client.aio.chats.create(
-                        history=memory, model=model, config=config
+                        history=curr_memory, model=model, config=config
                     )
                 else:
                     chat = genai_client.aio.chats.create(model=model, config=config)
@@ -141,7 +148,6 @@ def prompt(tools: list[Tool], genai_client: Client):
 
                 tasks = [handle_attachment(attachment, genai_client) for attachment in ctx.message.attachments]
                 results = await asyncio.gather(*tasks)
-
                 if ctx.message.attachments and not hasattr(results[0], "__getitem__"):
                     await send_long_message(
                         ctx,
@@ -170,7 +176,7 @@ def prompt(tools: list[Tool], genai_client: Client):
                     final_prompt.insert(0,
                                         f"{formatted_time}, {ctx.author.name} With Display Name {ctx.author.display_name} and ID {ctx.author.id}: ")
 
-                if not memory:
+                if not curr_memory:
                     mem = load_memory()
                     if mem:
                         final_prompt.insert(0, f"This is the memory you saved: {mem}")
@@ -192,8 +198,6 @@ def prompt(tools: list[Tool], genai_client: Client):
                 logging.info(f"Got Final Prompt {final_prompt}")
 
                 response = await chat.send_message(final_prompt)
-                
-                print(len(response.candidates[0].content.parts))
 
                 if response.candidates[0].finish_reason == FinishReason.MALFORMED_FUNCTION_CALL:
                     logging.error("Function call is malformed!")
@@ -213,7 +217,7 @@ def prompt(tools: list[Tool], genai_client: Client):
 
                 latest_token_count = response.usage_metadata.total_token_count
 
-                memory = chat._curated_history
+                save_memory(chat._curated_history)
 
                 logging.info("Got Response.")
                 for part in response.candidates[0].content.parts:
@@ -232,11 +236,8 @@ def prompt(tools: list[Tool], genai_client: Client):
                     if part.inline_data is not None:
                         logging.info("Got Image")
                         file_name = './temp/' + generate_unique_file_name("png")
-                        try:
-                            with open(file_name, "wb") as f:
-                                f.write(part.inline_data.data)
-                        except Exception as e:
-                            logging.error(e)
+                        with open(file_name, "wb") as f:
+                            f.write(part.inline_data.data)
                         file_names.append(file_name)
                         await send_image(ctx, file_name)
 
@@ -281,15 +282,17 @@ def prompt(tools: list[Tool], genai_client: Client):
 
                         logging.info(f"Sent\nText:\n{text}\nThought:\n{thought_matches}\nSecrets:\n{secret_matches}")
 
-        except ssl.SSLEOFError as e:
-            error_message = ("A secure connection error occurred (SSL connection unexpectedly closed)."
-                             "This may be due to a temporary network problem or an issue with the server."
-                             f"You can try again. If the problem persists, you can wait or you can contact Google. `{e}`.")
-            logging.error(f"Error: {error_message}")
-            await send_long_message(ctx, error_message, MAX_MESSAGE_LENGTH)
+        except (errors.ClientError, errors.UnsupportedFunctionError, errors.UnknownFunctionCallArgumentError) as e:
+            await send_long_message(ctx, f"Something went wrong on our side. Please submit a bug report at the GitHub repo for this bot, or ping the creator.\n```{e}```", MAX_MESSAGE_LENGTH)
+            logging.error(traceback.format_exc())
+            print(e)
+
+        except (errors.ServerError, errors.APIError) as e:
+            await send_long_message(ctx, f"Something went wrong on Google's end / Gemini. Please wait for a while and try again.\n```{e}```", MAX_MESSAGE_LENGTH)
+            logging.error(traceback.format_exc())
 
         except Exception as e:
-            await send_long_message(ctx, f"A general error happened! `{e}`", MAX_MESSAGE_LENGTH)
+            await send_long_message(ctx, f"Something went wrong. Please review the error and maybe submit a bug report.\n```{e}```", MAX_MESSAGE_LENGTH)
             logging.error(traceback.format_exc())
 
         finally:

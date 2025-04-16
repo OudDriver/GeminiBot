@@ -1,5 +1,7 @@
 import logging
 
+from packages.utils import save_temp_config
+
 
 def save_memory(msg: str):
     """
@@ -12,7 +14,15 @@ def save_memory(msg: str):
     logging.info(f"Saved {msg}")
 
     with open("memory.txt", "a") as f:
-        f.write('\n' + msg)
+        f.write("\n" + msg)
+
+    save_temp_config(
+        tool_use={
+            "name": "Search DuckDuckGo",
+            "input": msg,
+            "output": "",
+        }
+    )
 
 def load_memory():
     """

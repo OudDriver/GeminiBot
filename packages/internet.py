@@ -7,6 +7,9 @@ from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 from typing import Any, Dict
 
+from packages.utils import save_temp_config
+
+
 def search_duckduckgo(query: str, max_results: int, get_website_content: bool) -> list[dict[str, str]]:
     """Searches DuckDuckGo for a given query and returns a list of results. All arguments are required.
 
@@ -25,6 +28,13 @@ def search_duckduckgo(query: str, max_results: int, get_website_content: bool) -
             if get_website_content:
                 result["body"] = get_webpage_content_ddg(result["href"])
             results.append(result)
+        save_temp_config(
+            tool_use={
+                "name": "Search DuckDuckGo",
+                "input": {"query": query, "max_results": max_results, "get_website_content": get_website_content},
+                "output": results,
+            }
+        )
         return results
 
 def get_webpage_content_ddg(url: str) -> str:
@@ -62,14 +72,28 @@ def make_get_request(url: str, *kwargs: Any) -> str:
         with httpx.Client() as client:
             response = client.get(url, params=params, follow_redirects=True)
             response.raise_for_status()
+            save_temp_config(
+                tool_use={
+                    "name": "Make Get Request",
+                    "input": url,
+                    "output": response.text,
+                }
+            )
             return response.text
     except httpx.HTTPError as exc:
         logging.error(f"HTTP error occurred: {exc}")
-        return ""
+        save_temp_config(
+            tool_use={
+                "name": "Make Get Request (Error)",
+                "input": url,
+                "output": str(exc),
+            }
+        )
+        return str(exc)
 
 def get_wikipedia_page(query: str) -> str:
     """
-    Retrieves the content of a Wikipedia page based on the given query.
+    Retrieves the content of a Wikipedia page based on the given query. Use this if you need more details about something.
 
     Args:
         query: The search query for the Wikipedia article.
@@ -80,13 +104,43 @@ def get_wikipedia_page(query: str) -> str:
     try:
         page = wikipedia.page(query)
         logging.info(f"Retrieval about {page.title} successful.")
+        save_temp_config(
+            tool_use={
+                "name": "Get Wikipedia",
+                "input": query,
+                "output": page.content,
+            }
+        )
         return page.content
     except wikipedia.exceptions.PageError:
         logging.error(f"No Wikipedia page found for '{query}'.")
+        save_temp_config(
+            tool_use={
+                "name": "Get Wikipedia (Error)",
+                "input": query,
+                "output": f"Sorry, I couldn't find a Wikipedia page for '{query}'.",
+            }
+        )
         return f"Sorry, I couldn't find a Wikipedia page for '{query}'."
     except wikipedia.exceptions.DisambiguationError as e:
         logging.error(f"Disambiguation error occurred: {e}")
+        save_temp_config(
+            tool_use={
+                "name": "Get Wikipedia (Error)",
+                "input": query,
+                "output": f"Your query is ambiguous. Please be more specific. Did you mean any of these?\n{e.options}",
+            }
+        )
         return f"Your query is ambiguous. Please be more specific. Did you mean any of these?\n{e.options}"
     except Exception as e:
         logging.error(f"An error occurred while fetching Wikipedia data: {e}")
-        return "Sorry, I encountered an error while fetching information from Wikipedia."
+        save_temp_config(
+            tool_use={
+                "name": "Get Wikipedia (Error)",
+                "input": query,
+                "output": "Sorry, I encountered an error while fetching information from Wikipedia.",
+            }
+        )
+        return (
+            "Sorry, I encountered an error while fetching information from Wikipedia."
+        )

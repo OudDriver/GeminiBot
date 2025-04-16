@@ -3,6 +3,8 @@ import asyncio
 import nest_asyncio
 import logging
 
+from packages.utils import save_temp_config
+
 nest_asyncio.apply()
 
 def get_weather(city: str):
@@ -33,4 +35,6 @@ def get_weather(city: str):
             return output
 
     loop = asyncio.get_running_loop() 
-    return loop.run_until_complete(weather(city))
+    weather_output = loop.run_until_complete(weather(city))
+    save_temp_config(tool_use={"name": "Get Weather", "input": city, "output": weather_output})
+    return weather_output

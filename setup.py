@@ -1,4 +1,5 @@
 import os
+import platform
 import queue
 import shutil
 import subprocess
@@ -148,16 +149,19 @@ def run_command(cmd_list: list[str] | str, admin: bool=True):
 
 
 if __name__ == "__main__":
-    cmake_command = run_command("python3.12 install_cmake.py".split(" "), False)
+    python_interpreter = 'python3' if platform.platform() == 'Linux' else 'python'
+    pip = 'pip' if platform.platform() == 'Linux' else 'pip'
+
+    cmake_command = run_command(f"{python_interpreter} installs/install_cmake.py".split(" "), False)
     print(f"Command returned: {cmake_command}")
 
-    install_command = run_command("pip3.12 install -r requirements.txt".split(" "), False)
+    install_command = run_command(f"{pip} install -r requirements.txt".split(" "), False)
     print(f"Command returned: {install_command}")
 
-    docker_command = run_command("python3.12 install_docker.py".split(" "), False)
+    docker_command = run_command(f"{python_interpreter} installs/install_docker.py".split(" "), False)
     print(f"Docker command exited with code {docker_command}")
     
-    latex_command = run_command("python3.12 install_docker.py".split(" "), False)
+    latex_command = run_command(f"{python_interpreter} installs/install_latex.py".split(" "), False)
     print(f"LaTeX command exited with code {latex_command}")
 
     print("Review any errors and run main.py!")

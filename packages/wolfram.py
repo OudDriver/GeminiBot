@@ -7,8 +7,11 @@ import logging
 import nest_asyncio
 import asyncio
 
+from packages.utils import save_temp_config
+
 nest_asyncio.apply()
 
+# TODO add error handling (it's nonexistent now)
 class WolframAlphaAPI:
     """
     A Python object for interacting with the Wolfram Alpha API.
@@ -57,7 +60,7 @@ class WolframAlphaAPI:
         """
         return xmltodict.parse(xml_string)
     
-    async def _find_steps_input(self, input_string):
+    async def _find_steps_input(self, input_string: str) -> dict | None:
         temp_response = await self._make_request("query", input_string)
         temp_doc = await self._parse_xml(temp_response.text)
         temp_doc = temp_doc['queryresult']
@@ -167,6 +170,13 @@ def wolfram_alpha(query: str):
     loop = asyncio.get_running_loop()
     output = loop.run_until_complete(client.query(query))
 
-    logging.info(output)
+    cleaned = client.clean_up(output)
     logging.info(client.clean_up(output))
-    return client.clean_up(output)
+    save_temp_config(
+        tool_use={
+            "name": "Wolfram Alpha",
+            "input": query,
+            "output": cleaned,
+        }
+    )
+    return cleaned

@@ -272,8 +272,8 @@ def install_docker():
 
         elif system == "Windows":
             download_url_windows = 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe'
-            output_file = 'temp/docker_installer.exe'
-            os.makedirs('temp', exist_ok=True)
+            output_file = '../temp/docker_installer.exe'
+            os.makedirs('../temp', exist_ok=True)
             download_file_with_progress(download_url_windows, output_file)
             print("A GUI will show up. Follow the instructions. Then, log out and log back in.")
             print("Open the \"Docker Desktop\" app, press skip on all (or sign in, it's up to you) and run this script.")
@@ -288,7 +288,7 @@ def install_docker():
 
     finally:
         try:
-            os.remove('./temp/docker_installer.exe')
+            os.remove('../temp/docker_installer.exe')
             print("Removed docker_installer.exe")
         except FileNotFoundError:
             print("docker_installer not found. It means that you're not running Windows.")

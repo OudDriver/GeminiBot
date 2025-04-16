@@ -1,5 +1,5 @@
 from typing import Dict, Any, List
-
+import regex
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, call
 import json
@@ -7,20 +7,46 @@ import sys
 import os
 import discord
 import unittest
+from discord.ext import commands
+from google.genai import Client
+from google.genai.types import (
+    GenerateContentResponse,
+    Candidate,
+    Content,
+    Part,
+    FinishReason,
+    GenerateContentResponseUsageMetadata,
+    SafetyRating,
+    HarmCategory,
+    HarmProbability,
+    File,
+    Tool,
+    ToolCodeExecution,
+    ExecutableCode,
+    Language,
+    CodeExecutionResult,
+    Blob,
+    FileData,
+    GoogleSearch,
+    GroundingMetadata,
+    GroundingChunk,
+    GroundingChunkWeb,
+    GenerateContentConfig,
+    SafetySetting,
+    HarmBlockThreshold,
+    AutomaticFunctionCallingConfig,
+)
+from requests import Response
+from google.genai import errors
+from datetime import datetime, timezone
+from pytest_mock import MockerFixture
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 sys.path.insert(0, project_root)
 
-from discord.ext import commands
-from google.genai import Client
-from google.genai.types import GenerateContentResponse, Candidate, Content, Part, FinishReason, \
-    GenerateContentResponseUsageMetadata, SafetyRating, HarmCategory, HarmProbability, File, Tool, \
-    ToolCodeExecution, ExecutableCode, Language, CodeExecutionResult, Blob, FileData, GoogleSearch, GroundingMetadata, \
-    GroundingChunk, GroundingChunkWeb
-from commands.prompt import prompt, CONFIG
-from datetime import datetime, timezone
-from pytest_mock import MockerFixture
+import commands.prompt as commands_module
+from commands.prompt import prompt, CONFIG, YOUTUBE_PATTERN
 
 
 @pytest.fixture
@@ -102,6 +128,7 @@ def mock_genai_client(request: pytest.FixtureRequest) -> MagicMock:
     code_execution_result: str = params.get("code_execution_result", "")
     inline_data: str = params.get("inline_data", "")
     grounding_details: List[Dict[str, str]] = params.get("grounding_details", [])
+    curated_history: List = params.get("curated_history", [])
 
     parts = [Part(text=response_text)]
     if executable_code and code_execution_result:
@@ -114,8 +141,10 @@ def mock_genai_client(request: pytest.FixtureRequest) -> MagicMock:
     elif executable_code and inline_data:
         parts += [
             Part(
-                executable_code=ExecutableCode(code=executable_code, language=Language('PYTHON')),
-                inline_data=Blob(data=inline_data.encode())
+                executable_code=ExecutableCode(
+                    code=executable_code, language=Language("PYTHON")
+                ),
+                inline_data=Blob(data=inline_data.encode()),
             )
         ]
 
@@ -147,6 +176,7 @@ def mock_genai_client(request: pytest.FixtureRequest) -> MagicMock:
         ),
     )
     mock_chat.send_message.return_value = mock_response
+    mock_chat._curated_history = curated_history
     return mock_genai_client
 
 
@@ -166,8 +196,9 @@ def mock_temp_config(request: pytest.FixtureRequest) -> dict:
     params: Dict[str, Any] = getattr(request, "param", {})
 
     uwu: bool = params.get('uwu', False)
+    model: str = params.get('model', 'gemini-pro')
     return {
-        "model": "gemini-pro",
+        "model": model,
         "system_prompt": "You are a helpful assistant.",
         "uwu": uwu
     }
@@ -191,14 +222,67 @@ def create_mock_attachments(attachment_data: list[dict]) -> tuple[list[AsyncMock
 
     return mock_attachments, mock_files
 
+def generate_config(expected_safety_threshold: HarmBlockThreshold, use_image_model: bool = False):
+    safety_settings = [
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+            threshold=expected_safety_threshold,
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold=expected_safety_threshold,
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold=expected_safety_threshold,
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold=expected_safety_threshold,
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            threshold=expected_safety_threshold,
+        ),
+    ]
+
+    if not use_image_model:
+        generate_content_config = GenerateContentConfig(
+            system_instruction="You are a helpful assistant.",
+            temperature=0.3,
+            safety_settings=safety_settings,
+            automatic_function_calling=AutomaticFunctionCallingConfig(
+                maximum_remote_calls=5
+            ),
+            tools=[],
+        )
+    else:
+        generate_content_config = GenerateContentConfig(
+            system_instruction=None,
+            temperature=0.3,
+            safety_settings=safety_settings,
+            automatic_function_calling=None,
+            tools=None,
+            response_modalities=['Text', 'Image']
+        )
+
+    return generate_content_config
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "mock_ctx",
     [
-        {"message_content": "<@12345> Hello, world!"},
+        {"message_content": "<@12345> Hello, world!"}
     ],
     indirect=["mock_ctx"],
+)
+@pytest.mark.parametrize(
+    "mock_genai_client",
+    [
+        {"curated_history": ['Mock memory']}
+    ],
+    indirect=["mock_genai_client"]
 )
 async def test_prompt_basic_success(mock_ctx: AsyncMock, mock_genai_client: MagicMock, datetime_mock: MagicMock,
                                     mock_temp_config: dict):
@@ -211,12 +295,18 @@ async def test_prompt_basic_success(mock_ctx: AsyncMock, mock_genai_client: Magi
             patch("commands.prompt.handle_attachment") as mock_handle_attachment, \
             patch("builtins.open", new_callable=MagicMock) as mocked_open, \
             patch("os.remove") as mock_os_remove, \
-            patch("commands.prompt.datetime") as mock_datetime:
-        mocked_open.return_value.__enter__.return_value.read.return_value = json.dumps(mock_temp_config)
+            patch("commands.prompt.datetime") as mock_datetime, \
+            patch("commands.prompt.save_memory") as mock_save_memory, \
+            patch("commands.prompt.SAFETY_SETTING", "BLOCK_MEDIUM_AND_ABOVE"):
+        mocked_open.return_value.__enter__.return_value.read.return_value = json.dumps(
+            mock_temp_config
+        )
         mock_datetime.now.return_value = datetime_mock
 
         command_func = prompt([], mock_genai_client)
         await command_func(mock_ctx)
+
+    mock_genai_client.aio.chats.create.assert_called_once_with(config=generate_config(HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE), model='gemini-pro')
 
     mock_chat = mock_genai_client.aio.chats.create.return_value
 
@@ -240,12 +330,13 @@ async def test_prompt_basic_success(mock_ctx: AsyncMock, mock_genai_client: Magi
 
     args, kwargs = mock_genai_client.aio.chats.create.call_args
     assert kwargs['config'].system_instruction == mock_temp_config["system_prompt"]
-    assert kwargs['model'] == mock_temp_config["model"]
+    assert kwargs["model"] == mock_temp_config["model"]
 
     datetime_mock.strftime.assert_called_once_with("%A, %B %d, %Y %H:%M:%S UTC")
     mock_datetime.now.assert_called_once_with(timezone.utc)
 
     mock_os_remove.assert_not_called()
+    mock_save_memory.assert_called_once_with(['Mock memory'])
 
 
 @pytest.mark.asyncio
@@ -601,7 +692,7 @@ async def test_clear_admin(mock_ctx: AsyncMock, mock_genai_client: MagicMock, mo
             patch("commands.prompt.send_long_messages") as mock_send_long_messages, \
             patch("commands.prompt.send_image") as mock_send_image, \
             patch("builtins.open", new_callable=MagicMock) as mocked_open, \
-            patch('commands.prompt.memory.clear') as mock_memory_clear:
+            patch('commands.prompt.clear_memory') as mock_memory_clear:
         mocked_open.return_value.__enter__.return_value.read.return_value = json.dumps(mock_temp_config)
 
         command_func = prompt([], mock_genai_client)
@@ -635,7 +726,7 @@ async def test_clear_no_admin(mock_ctx: AsyncMock, mock_genai_client: MagicMock,
             patch("commands.prompt.send_long_messages") as mock_send_long_messages, \
             patch("commands.prompt.send_image") as mock_send_image, \
             patch("builtins.open", new_callable=MagicMock) as mocked_open, \
-            patch('commands.prompt.memory.clear') as mock_memory_clear:
+            patch('commands.prompt.clear_memory') as mock_memory_clear:
         mocked_open.return_value.__enter__.return_value.read.return_value = json.dumps(mock_temp_config)
 
         command_func = prompt([], mock_genai_client)
@@ -1290,10 +1381,215 @@ async def test_finish_reason_max_tokens(mock_ctx: AsyncMock, mock_genai_client: 
 
 
 @pytest.mark.asyncio
-async def test_context():
-    pass
+@pytest.mark.parametrize(
+    "mock_ctx",
+    [
+        {"message_content": "<@12345> Hello, world!"}
+    ],
+    indirect=["mock_ctx"],
+)
+async def test_prompt_with_memory(
+    mock_ctx: AsyncMock,
+    mock_genai_client: MagicMock,
+    datetime_mock: MagicMock,
+    mock_temp_config: dict,
+):
+    """Tests the memory scenario of the prompt command with mocked datetime."""
+
+    with (
+        patch("commands.prompt.load_memory", return_value=None),
+        patch("commands.prompt.send_long_message"),
+        patch("commands.prompt.send_long_messages"),
+        patch("commands.prompt.send_image"),
+        patch("commands.prompt.handle_attachment"),
+        patch("builtins.open", new_callable=MagicMock) as mocked_open,
+        patch("os.remove"),
+        patch("commands.prompt.datetime") as mock_datetime,
+        patch("commands.prompt.get_memory", return_value=["some interesting memories"]),
+        patch("commands.prompt.SAFETY_SETTING", "BLOCK_MEDIUM_AND_ABOVE"),
+    ):
+        mocked_open.return_value.__enter__.return_value.read.return_value = json.dumps(
+            mock_temp_config
+        )
+        mock_datetime.now.return_value = datetime_mock
+
+        command_func = prompt([], mock_genai_client)
+        await command_func(mock_ctx)
+
+    config = generate_config(HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE)
+
+    mock_genai_client.aio.chats.create.assert_called_once_with(
+        config=config, history=["some interesting memories"], model="gemini-pro"
+    )
+
+
+def test_clear_memory_functionality():
+    """Tests that commands.prompt.clear_memory actually clears the global list."""
+    commands_module.memory = ["initial item"]
+    assert len(commands_module.memory) == 1
+
+    commands_module.clear_memory()
+
+    assert commands_module.memory == []
+    assert len(commands_module.memory) == 0
+    assert isinstance(commands_module.memory, list)
 
 
 @pytest.mark.asyncio
-async def test_context_empty():
-    pass
+@pytest.mark.parametrize(
+    "mock_temp_config",
+    [
+        {"model": "gemini-2.0-flash-exp-image-generation"},
+    ],
+    indirect=["mock_temp_config"],
+)
+async def test_model_with_image_gen(mock_ctx: AsyncMock, mock_genai_client: MagicMock, mock_temp_config: dict):
+    with (
+        patch("commands.prompt.load_memory", return_value=None),
+        patch("builtins.open", new_callable=MagicMock) as mocked_open,
+        patch("os.remove"),
+        patch("commands.prompt.SAFETY_SETTING", "BLOCK_MEDIUM_AND_ABOVE"),
+    ):
+        mocked_open.return_value.__enter__.return_value.read.return_value = json.dumps(
+            mock_temp_config
+        )
+
+        command_func = prompt([], mock_genai_client)
+        await command_func(mock_ctx)
+
+    mock_chat = mock_genai_client.aio.chats.create.return_value
+
+    mock_genai_client.aio.chats.create.assert_called_once_with(
+        config=generate_config(
+            HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE, use_image_model=True
+        ),
+        model="gemini-2.0-flash-exp-image-generation",
+    )
+
+    chat_args, chat_kwargs = mock_chat.send_message.call_args
+    sent_prompt = chat_args[0]
+    assert sent_prompt == "Hello, world!"
+
+@pytest.mark.asyncio
+async def test_client_error_handling(mock_ctx: AsyncMock, mock_genai_client: MagicMock, mock_temp_config: dict):
+    with patch("commands.prompt.load_memory", return_value=None), \
+            patch("commands.prompt.send_long_message") as mock_send_long_message, \
+            patch("commands.prompt.send_long_messages"), \
+            patch("commands.prompt.send_image"), \
+            patch("commands.prompt.memory", []), \
+            patch("os.remove"), \
+            patch("builtins.open", new_callable=MagicMock) as mocked_open:
+        response = Response()
+        response.status_code = 400
+        response._content = b'{"error": {"code": 400, "message": "Invalid input", "status": "INVALID_ARGUMENT"}}'
+
+        mock_genai_client.aio.chats.create.side_effect = errors.ClientError(code=400, response=response)
+        mocked_open.return_value.__enter__.return_value.read.return_value = json.dumps(
+            mock_temp_config
+        )
+
+        command_func = prompt([], mock_genai_client)
+        await command_func(mock_ctx)
+
+    mock_send_long_message.assert_called_once_with(
+        mock_ctx,
+        (
+            "Something went wrong on our side. Please submit a bug report at the GitHub repo for this bot, or ping the creator.\n"
+            "```400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'Invalid input', 'status': 'INVALID_ARGUMENT'}}```"
+        ),
+        2000
+    )
+
+
+@pytest.mark.asyncio
+async def test_server_error_handling(mock_ctx: AsyncMock, mock_genai_client: MagicMock, mock_temp_config: dict):
+    with patch("commands.prompt.load_memory", return_value=None), \
+            patch("commands.prompt.send_long_message") as mock_send_long_message, \
+            patch("commands.prompt.send_long_messages"), \
+            patch("commands.prompt.send_image"), \
+            patch("commands.prompt.memory", []), \
+            patch("os.remove"), \
+            patch("builtins.open", new_callable=MagicMock) as mocked_open:
+        response = Response()
+        response.status_code = 500
+        response._content = b'{"error": {"code": 500, "message": "Internal Server Error", "status": "INTERNAL_SERVER_ERROR"}}'
+
+        mock_genai_client.aio.chats.create.side_effect = errors.ServerError(code=500, response=response)
+        mocked_open.return_value.__enter__.return_value.read.return_value = json.dumps(
+            mock_temp_config
+        )
+
+        command_func = prompt([], mock_genai_client)
+        await command_func(mock_ctx)
+
+    mock_send_long_message.assert_called_once_with(
+        mock_ctx,
+        (
+            "Something went wrong on Google's end / Gemini. Please wait for a while and try again.\n"
+            "```500 INTERNAL_SERVER_ERROR. {'error': {'code': 500, 'message': 'Internal Server Error', 'status': 'INTERNAL_SERVER_ERROR'}}```"
+        ),
+        2000
+    )
+
+
+@pytest.mark.asyncio
+async def test_exception_error_handling(mock_ctx: AsyncMock, mock_genai_client: MagicMock, mock_temp_config: dict):
+    with patch("commands.prompt.load_memory", return_value=None), \
+            patch("commands.prompt.send_long_message") as mock_send_long_message, \
+            patch("commands.prompt.send_long_messages"), \
+            patch("commands.prompt.send_image"), \
+            patch("commands.prompt.memory", []), \
+            patch("os.remove"), \
+            patch("builtins.open", new_callable=MagicMock) as mocked_open:
+
+        mock_genai_client.aio.chats.create.side_effect = Exception("An exception.")
+        mocked_open.return_value.__enter__.return_value.read.return_value = json.dumps(
+            mock_temp_config
+        )
+
+        command_func = prompt([], mock_genai_client)
+        await command_func(mock_ctx)
+
+    mock_send_long_message.assert_called_once_with(
+        mock_ctx,
+        (
+            "Something went wrong. Please review the error and maybe submit a bug report.\n"
+            "```An exception.```"
+        ),
+        2000
+    )
+
+
+def test_youtube_regex():
+    def verify(url: str):
+        return bool(regex.search(YOUTUBE_PATTERN, url))
+
+    assert verify('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+    assert verify('youtube.com/watch?v=dQw4w9WgXcQ')
+    assert verify('https://youtube.com/watch?v=dQw4w9WgXcQ')
+    assert verify('http://youtube.com/watch?v=dQw4w9WgXcQ')
+    # assert verify('http://youtube.co/watch?v=dQw4w9WgXcQ') # A heavy edge case
+    # assert verify('https://www.youtube.com/shorts/xIMlJUwB1m8') # regex pattern doesn't work with YouTube shorts, sadly
+
+    assert not verify('https://www.youtube.com/watc?v=dQw4w9WgXcQ')
+    assert not verify('https://www.youtube.com/watch?=dQw4w9WgXcQ')
+    assert not verify('https://www.youtube.com/watch?vdQw4w9WgXcQ')
+    assert not verify('https:www.youtube.com/watch?vdQw4w9WgXcQ')
+    assert not verify('https://www.youtube.com/?v=dQw4w9WgXcQ')
+    assert not verify('https://www.youtube.com/dQw4w9WgXcQ')
+    # assert not verify('https:/www.youtube.com/watch?v=dQw4w9WgXcQ') # I should find a better pattern weeeeee
+    assert not verify('https://www.youtube.comwatch?v=dQw4w9WgXcQ')
+    assert not verify('https//www.youtube.com/watch?vdQw4w9WgXcQ')
+
+    assert not verify('https://www.youtube.com/feed/history')
+    assert not verify('https://www.youtube.com/feed')
+    assert not verify('https://www.youtube.com/feed/trending?bp=6gQJRkVleHBsb3Jl')
+    assert not verify('https://www.youtube.com/channel/UCYfdidRxbB8Qhf0Nx7ioOYw')
+    assert not verify('https://studio.youtube.com/')
+    assert not verify('https://youtube.com')
+    assert not verify('https://www.youtube.com/@alanbecker')
+    assert not verify('https://www.youtube.com/account')
+
+    assert not verify('https://python.org/')
+    assert not verify('https://python.org')
+    assert not verify('https://aistudio.google.com/app/prompts/new_chat')

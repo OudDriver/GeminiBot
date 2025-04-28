@@ -1,26 +1,33 @@
 import json
 import logging
-import os
+from pathlib import Path
 
 from google import genai
-from google.genai.types import GoogleSearch, ToolCodeExecution, Tool
+from google.genai.types import GoogleSearch, HttpOptions, Tool, ToolCodeExecution
 
-from packages.internet import search_duckduckgo, make_get_request, get_wikipedia_page
-from packages.weather import get_weather
-from packages.wolfram import wolfram_alpha
-from packages.utils import execute_code
-from packages.memory import save_memory
+from packages.tools.internet import (
+    get_wikipedia_page,
+    make_get_request,
+    search_duckduckgo,
+)
+from packages.tools.memory import save_memory
+from packages.tools.weather import get_weather
+from packages.tools.wolfram import wolfram_alpha
+from packages.utilities.code_execution import execute_code
 
-def load_config():
-    """Loads the configuration from config.json."""
+
+def load_config() -> dict[str, str | float]:
+    """Load the configuration from config.json."""
     with open("config.json") as f:
         return json.load(f)
 
-def setup_logging():
-    """Configures logging to file and console."""
+def setup_logging() -> None:
+    """Configure logging to file and console."""
     # Define log format
-    log_format = '%(asctime)s - %(levelname)s - %(name)s - %(filename)s:%(lineno)d - %(message)s'
-    formatter = logging.Formatter(log_format, datefmt='%Y-%m-%d %H:%M:%S')
+    log_format = (
+        "%(asctime)s - %(levelname)s - %(name)s - %(filename)s:%(lineno)d - %(message)s"
+    )
+    formatter = logging.Formatter(log_format, datefmt="%Y-%m-%d %H:%M:%S")
 
     # Get the root logger
     logger = logging.getLogger()
@@ -30,53 +37,57 @@ def setup_logging():
         logger.removeHandler(handler)
         handler.close()
 
-    try:
-        file_handler = logging.FileHandler("bot.log", encoding='utf-8')
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(logging.DEBUG)
-        logger.addHandler(file_handler)
-    except Exception as e:
-        print(f"Error setting up file logging: {e}") # Basic error print if file handler fails
+    file_handler = logging.FileHandler("logs/bot.log", encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.DEBUG)
+    logger.addHandler(file_handler)
 
-    # --- Console (Stream) Handler ---
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
     stream_handler.setLevel(logging.INFO)
     logger.addHandler(stream_handler)
 
-    logging.info("Set up logging.")
+    logger.info("Set up logging.")
 
-def setup_gemini(api_key):
+def setup_gemini(api_key: str, api_version: str = "v1alpha") -> genai.Client:
     """Configures the Google Gemini API client."""
-    return genai.Client(api_key=api_key, http_options={'api_version': 'v1alpha'})
+    return genai.Client(
+        api_key=api_key,
+        http_options=HttpOptions(api_version=api_version),
+    )
 
-def get_initial_state(config):
+def get_initial_state(config: dict) -> dict:
     """Gets the initial state for the bot (model, system prompt, etc.)."""
-
+    logger = logging.getLogger(__name__)
     temp_config_path = "temp/temp_config.json"
     try:
-        os.remove(temp_config_path)
-        logging.info("Removed temp_config.json")  
+        Path(temp_config_path).unlink()
+        logger.info("Removed temp_config.json")
     except FileNotFoundError:
-        logging.info("temp_config.json not found, no need to remove.") 
-    except OSError as e:
-        logging.error(f"Error removing temp_config.json: {e}")  
+        logger.info("temp_config.json not found, no need to remove.")
+    except OSError:
+        logger.exception("Error removing temp_config.json.")
 
     system_prompts = config["SystemPrompts"]
-    model_options = [key for key in config["ModelNames"]]
-    model_clean_names = {}
+    model_options = list(config["ModelNames"])
+    model_clean_names = dict(config["ModelNames"].items())
 
-    for key, value in config["ModelNames"].items():
-        model_clean_names[key] = value
-    
     tools = {
-        "Default": [get_weather, make_get_request, get_wikipedia_page, wolfram_alpha, execute_code, search_duckduckgo, save_memory],
+        "Default": [
+            get_weather,
+            make_get_request,
+            get_wikipedia_page,
+            wolfram_alpha,
+            execute_code,
+            search_duckduckgo,
+            save_memory,
+        ],
         "Google Search": [Tool(google_search=GoogleSearch())],
-        "Code Execution": [Tool(code_execution=ToolCodeExecution())]
+        "Code Execution": [Tool(code_execution=ToolCodeExecution())],
     }
 
     current_sys_prompt_index = 0
-    system_prompt_data = system_prompts[current_sys_prompt_index]['SystemPrompt']
+    system_prompt_data = system_prompts[current_sys_prompt_index]["SystemPrompt"]
     current_model_index = 0
     model = model_options[current_model_index]
     current_uwu_status = False
@@ -84,11 +95,19 @@ def get_initial_state(config):
     tool_names = list(tools.keys())
     active_tools = tools[tool_names[active_tools_index]]
 
-    if not os.path.isdir("./temp"):
-        os.makedirs("./temp")
+    if not Path("temp").is_dir():
+        Path("temp").mkdir(parents=True)
 
     with open(temp_config_path, "w") as f:
-        json.dump({"model": model, "system_prompt": system_prompt_data, "uwu": current_uwu_status, "thought": "", "secret": [], "tools_history": []}, f)
+        json.dump(
+            {
+                "model": model,
+                "system_prompt": system_prompt_data,
+                "uwu": current_uwu_status,
+                "thought": "",
+                "secret": [],
+                "tools_history": [],
+            }, f)
 
     return {
         "system_prompts": system_prompts,
@@ -101,6 +120,6 @@ def get_initial_state(config):
         "tools": tools,
         "active_tools": active_tools,
         "active_tools_index": active_tools_index,
-        "model_clean_names": model_clean_names
+        "model_clean_names": model_clean_names,
     }
 

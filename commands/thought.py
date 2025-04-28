@@ -1,17 +1,20 @@
 from discord.ext import commands
-from packages.utils import read_temp_config, remove_thought_tags
+
+from packages.utilities.file_utils import read_temp_config
+from packages.utilities.general_utils import remove_thought_tags
+
 
 @commands.hybrid_command()
-async def thought(ctx: commands.Context):
-    """
-    Shows what the bot is thinking
+async def thought(ctx: commands.Context) -> None:
+    """Show the bot's thought process.
 
     Args:
         ctx: The context of the command invocation
+
     """
     temp_config = read_temp_config()
 
-    thoughts = temp_config['thought']
+    thoughts = temp_config["thought"]
     thoughts_found = ""
 
     for t in thoughts:

@@ -1,306 +1,192 @@
-import json
-from datetime import datetime, timezone
-import traceback
-import os
-import regex
-import asyncio
+from __future__ import annotations
+
 import logging
-import discord
-from discord.ext import commands
-from google.genai.types import GenerateContentConfig, SafetySetting, Part,\
-    AutomaticFunctionCallingConfig, HarmCategory, FinishReason, FileData, \
-    Tool
-from google.genai import Client
-from google.genai import errors
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Callable
 
-from bot.setup import load_config
-from packages.utils import clean_text, create_grounding_markdown, send_long_messages, \
-    send_long_message, send_image, generate_unique_file_name, repair_links, save_temp_config
-from packages.tex import render_latex, split_tex, check_tex
-from packages.uwu import Uwuifier
-from packages.file_utils import handle_attachment, wait_for_file_active
-from packages.memory import load_memory
-from packages.maps import BLOCKED_CATEGORY, HARM_PRETTY_NAME
+from google.genai import Client, errors
 
-YOUTUBE_PATTERN = regex.compile(r'(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch|v|embed)('
-                                r'?:\.php)?(?:\?.*v=|\/))([a-zA-Z0-9\_-]+)')
-MAX_MESSAGE_LENGTH = 2000
-CONFIG = load_config()
-SAFETY_SETTING = CONFIG["HarmBlockThreshold"]
+from packages.maps import MAX_MESSAGE_LENGTH, YOUTUBE_PATTERN
+from packages.tools.memory import load_memory
+from packages.utilities.file_utils import save_temp_config
+from packages.utilities.general_utils import send_long_message
+from packages.utilities.prompt_utils import (
+    cleanup_files,
+    create_chat,
+    prepare_api_config,
+    prepend_author_info,
+    process_attachments,
+    process_response_parts,
+    process_youtube_links,
+    send_message_and_handle_status,
+    validate_invocation,
+)
+
+if TYPE_CHECKING:
+    from discord.ext import commands
+    from google.genai.types import (
+        Content,
+        Tool,
+    )
 
 latest_token_count = 0
-ctx_glob = None
+ctx_glob = None # Only this file will modify ctx_glob
 memory = []
+logger = logging.getLogger(__name__)
 
-def save_memory(history):
+
+def save_memory(history: list[Content]) -> None:
+    """Save the history to a global variable."""
     global memory
     memory = history
 
-def clear_memory():
-    global memory
+
+def clear_memory() -> None:
+    """Clear global variable."""
     memory.clear()
 
-def get_memory():
-    global memory
+
+def get_memory() -> list:
+    """Get the global variable."""
     return memory
 
-def prompt(tools: list[Tool], genai_client: Client):
-    async def command(ctx: commands.Context): 
-        """
-        Generates a response. Supports file inputs and YouTube links.
 
-        Args:
-            ctx: The context of the command invocation
-        """
+async def handle_clear(ctx: commands.Context) -> None:
+    """Handle the clear command.
+
+    Args:
+        ctx: the context of the command invocation
+
+    """
+    global latest_token_count
+    latest_token_count = 0
+    if ctx.author.guild_permissions.administrator:
+        clear_memory()
+        save_temp_config(tool_use={})
+        await ctx.reply(
+            "Alright, I have cleared my context. What are we gonna talk about?",
+        )
+        logger.info("Cleared context.")
+        return
+    await ctx.reply(
+        "You don't have the necessary permissions for this!",
+        ephemeral=True,
+    )
+    return
+
+def prompt(tools: list[Tool], genai_client: Client) -> Callable:
+    """A prompt wrapper function.
+
+    Args:
+        tools: A list of tools for the model to use.
+               E.g. Code Execution or custom function calls.
+        genai_client: The genai client to use.
+
+    Returns:
+        A prompt command.
+    """
+    async def command(ctx: commands.Context) -> None:
         global ctx_glob, latest_token_count
+        file_names = []
+
         try:
             curr_memory = get_memory()
-            is_reply_to_bot = False
-            if ctx.message.reference:
-                replied_message = await ctx.fetch_message(ctx.message.reference.message_id)
-                is_reply_to_bot = replied_message.author.id == ctx.bot.user.id
-
-            is_mention = ctx.message.mentions and ctx.bot.user in ctx.message.mentions
-
-            if not (is_reply_to_bot or is_mention):
+            message = ctx.message.content.replace(f"<@{ctx.bot.user.id}>", "").strip()
+            if await validate_invocation(ctx, message):
                 return
-
-            message = ctx.message.content.replace(f'<@{ctx.bot.user.id}>', '').strip()
-            if not message:
-                return await ctx.send("You mentioned me or replied to me, but you didn't give me any prompt!")
-
             now = datetime.now(timezone.utc)
             formatted_time = now.strftime("%A, %B %d, %Y %H:%M:%S UTC")
-            
-            with open("temp/temp_config.json") as TEMP_CONFIG:
-                configs = json.load(TEMP_CONFIG)
-            
-            model = configs['model']
-            safety_settings = [
-                SafetySetting(
-                    category=HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
-                    threshold=SAFETY_SETTING,
-                ),
-                SafetySetting(
-                    category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                    threshold=SAFETY_SETTING,
-                ),
-                SafetySetting(
-                    category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-                    threshold=SAFETY_SETTING,
-                ),
-                SafetySetting(
-                    category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                    threshold=SAFETY_SETTING,
-                ),
-                SafetySetting(
-                    category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                    threshold=SAFETY_SETTING,
-                ),
-            ]
-
-            if model == "gemini-2.0-flash-exp-image-generation":
-                response_modalities = ["Text", "Image"]
-                tool_func_call = None
-                auto_func_call = None
-                system_instructions = None
-
-            else:
-                response_modalities = None
-                tool_func_call = tools
-                auto_func_call = AutomaticFunctionCallingConfig(maximum_remote_calls=5)
-                system_instructions = configs['system_prompt']
-
-            config = GenerateContentConfig(
-                system_instruction=system_instructions,
-                tools=tool_func_call,
-                safety_settings=safety_settings,
-                automatic_function_calling=auto_func_call,
-                response_modalities=response_modalities,
-                temperature=0.3
-            )
+            model, api_config, safety_setting, temp_config = prepare_api_config(tools)
 
             async with ctx.typing():
                 if message.lower() == "{clear}":
-                    if ctx.author.guild_permissions.administrator:
-                        clear_memory()
-                        save_temp_config(tool_use={})
-                        await ctx.reply("Alright, I have cleared my context. What are we gonna talk about?")
-                        logging.info("Cleared Context")
-                        return
-                    else:
-                        await ctx.reply("You don't have the necessary permissions for this!", ephemeral=True)
-                        return
-                
-                if curr_memory:
-                    chat = genai_client.aio.chats.create(
-                        history=curr_memory, model=model, config=config
-                    )
-                else:
-                    chat = genai_client.aio.chats.create(model=model, config=config)
+                    await handle_clear(ctx)
+                    return
 
+                chat = create_chat(genai_client, model, api_config, curr_memory)
                 ctx_glob = ctx
-                logging.info(f"Received Input With Prompt: {message}")
-                
+
+                logger.info(f"Received Input With Prompt: {message}")
                 final_prompt = [YOUTUBE_PATTERN.sub("", message)]
-                file_names = []
-                uploaded_files = []
+                attachment_file_names = await process_attachments(
+                    ctx,
+                    genai_client,
+                    final_prompt,
+                )
 
-                tasks = [handle_attachment(attachment, genai_client) for attachment in ctx.message.attachments]
-                results = await asyncio.gather(*tasks)
-                if ctx.message.attachments and not hasattr(results[0], "__getitem__"):
-                    await send_long_message(
-                        ctx,
-                        f"Error: Failed to upload attachment(s). Continuing as if the files are not uploaded. Error: `{results[0]}`.",
-                        MAX_MESSAGE_LENGTH
-                    )
-                else:
-                    for result in results:
-                        file_names.extend(result[0])
-                        uploaded_files.extend(result[1])
-
-                
-                if uploaded_files:
-                    for uploaded_file in uploaded_files:
-                        await wait_for_file_active(uploaded_file)
-                        logging.info(f"{uploaded_file.name} is active at server")
-                        final_prompt.append(Part.from_uri(file_uri=uploaded_file.uri, mime_type=uploaded_file.mime_type))
-
-                
-                if ctx.message.reference:
-                    replied = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-                    final_prompt.insert(0,
-                                        (f"{formatted_time}, {ctx.author.name} With Display Name "
-                                         f"{ctx.author.display_name} and ID {ctx.author.id} Replied to your message, \"{replied.content}\": "))
-                else:
-                    final_prompt.insert(0,
-                                        f"{formatted_time}, {ctx.author.name} With Display Name {ctx.author.display_name} and ID {ctx.author.id}: ")
+                file_names.extend(attachment_file_names)
+                await prepend_author_info(ctx, final_prompt, formatted_time)
 
                 if not curr_memory:
                     mem = load_memory()
                     if mem:
                         final_prompt.insert(0, f"This is the memory you saved: {mem}")
 
-                links = regex.finditer(YOUTUBE_PATTERN, message)
-                
-                if links:
-                    for link in links:
-                        for i, final in enumerate(final_prompt):
-                            final_prompt[i] = regex.sub(YOUTUBE_PATTERN, "", final)
-                        url = repair_links(link.group())
-                        file = FileData(file_uri=url)
-                        logging.info(f"Found and Processed Link {url}")
-                        final_prompt.append(Part(file_data=file))
+                process_youtube_links(message, final_prompt)
 
                 if model == "gemini-2.0-flash-exp-image-generation":
                     final_prompt = final_prompt[-1]
 
-                logging.info(f"Got Final Prompt {final_prompt}")
+                logger.info(f"Got Final Prompt {final_prompt}")
 
-                response = await chat.send_message(final_prompt)
+                response_result = await send_message_and_handle_status(
+                    chat,
+                    final_prompt,
+                    ctx,
+                    safety_setting,
+                )
 
-                if response.candidates[0].finish_reason == FinishReason.MALFORMED_FUNCTION_CALL:
-                    logging.error("Function call is malformed!")
-                    await ctx.reply("Seems like my function calling tool is malformed. Try again!")
-                    return
-
-                if response.candidates[0].finish_reason == FinishReason.SAFETY:
-                    blocked_category = []
-                    for safety in response.candidates[0].safety_ratings:
-                        if safety.probability in BLOCKED_CATEGORY[SAFETY_SETTING]:
-                            blocked_category.append(HARM_PRETTY_NAME[safety.category.name])
-
-                    await ctx.reply(f"This response was blocked due to {', '.join(blocked_category)}", ephemeral=True)
-                    logging.warning(f"Response blocked due to safety: {blocked_category}")
-                    return
-
-
+                response, candidates, first_candidate, finish_reason = response_result
                 latest_token_count = response.usage_metadata.total_token_count
 
                 save_memory(chat._curated_history)
 
-                logging.info("Got Response.")
-                for part in response.candidates[0].content.parts:
-                    if part.executable_code is not None:
-                        logging.info("Ran Code Execution:\n" + part.executable_code.code)
-                        await send_long_message(ctx,
-                                                f"Code:\n```{part.executable_code.language.name.lower()}\n{part.executable_code.code}\n```",
-                                                MAX_MESSAGE_LENGTH)
+                logger.info("Got Response.")
 
-                    if part.code_execution_result is not None:
-                        logging.info(f"Code Execution Output:\n{part.code_execution_result.output}")
-                        await send_long_message(ctx,
-                                                f"Output:\n```\n{part.code_execution_result.output}\n```",
-                                                MAX_MESSAGE_LENGTH)
+                output_file_names = await process_response_parts(
+                    ctx,
+                    candidates,
+                    finish_reason,
+                    temp_config,
+                    tools,
+                )
 
-                    if part.inline_data is not None:
-                        logging.info("Got Image")
-                        file_name = './temp/' + generate_unique_file_name("png")
-                        with open(file_name, "wb") as f:
-                            f.write(part.inline_data.data)
-                        file_names.append(file_name)
-                        await send_image(ctx, file_name)
+                file_names.extend(output_file_names)
 
-                    if part.text is not None:
-                        text, thought_matches, secret_matches = clean_text(part.text)
-
-                        if configs['uwu']:
-                            uwu = Uwuifier()
-                            text = uwu.uwuify_sentence(text)
-
-                        if thought_matches:
-                            save_temp_config(thought=thought_matches)
-                            text += "\n(This reply have a thought)"
-
-                        if secret_matches:
-                            save_temp_config(secret=secret_matches)
-
-                        if any(not callable(tool) and tool.google_search for tool in tools):
-                            text = text + f"\n{create_grounding_markdown(response.candidates)}"
-
-                        if response.candidates[0].finish_reason == FinishReason.MAX_TOKENS:
-                            text = text + "\n(Response May Be Cut Off)"
-
-                        response_if_tex = split_tex(text)
-
-                        if len(response_if_tex) > 1:
-                            for j, tex in enumerate(response_if_tex):
-                                if check_tex(tex):
-                                    logging.info(tex)
-                                    file_tex = render_latex(tex)
-                                    if not file_tex:
-                                        response_if_tex[j] += " (Contains Invalid LaTeX Expressions)"
-                                        continue
-                                    file_names.append(file_tex)
-                                    response_if_tex[j] = discord.File(file_tex)
-
-                            await send_long_messages(
-                                ctx, response_if_tex, MAX_MESSAGE_LENGTH
-                            )
-                        else:
-                            await send_long_message(ctx, text, MAX_MESSAGE_LENGTH)
-
-                        logging.info(f"Sent\nText:\n{text}\nThought:\n{thought_matches}\nSecrets:\n{secret_matches}")
-
-        except (errors.ClientError, errors.UnsupportedFunctionError, errors.UnknownFunctionCallArgumentError) as e:
-            await send_long_message(ctx, f"Something went wrong on our side. Please submit a bug report at the GitHub repo for this bot, or ping the creator.\n```{e}```", MAX_MESSAGE_LENGTH)
-            logging.error(traceback.format_exc())
-            print(e)
+        except (
+            errors.ClientError,
+            errors.UnsupportedFunctionError,
+            errors.UnknownFunctionCallArgumentError,
+        ) as e:
+            await send_long_message(
+                ctx,
+                f"Something went wrong on our side. "
+                f"Please submit a bug report at the GitHub repo for this bot, "
+                f"or ping the creator.\n```{e}```",
+                MAX_MESSAGE_LENGTH,
+            )
+            logger.exception("An error happened at our side.")
 
         except (errors.ServerError, errors.APIError) as e:
-            await send_long_message(ctx, f"Something went wrong on Google's end / Gemini. Please wait for a while and try again.\n```{e}```", MAX_MESSAGE_LENGTH)
-            logging.error(traceback.format_exc())
+            await send_long_message(
+                ctx,
+                f"Something went wrong on Google's end / Gemini. "
+                f"Please wait for a while and try again.\n```{e}```",
+                MAX_MESSAGE_LENGTH,
+            )
+            logger.exception(
+                "An error happened at Gemini's side (or rather a general API error).",
+            )
 
         except Exception as e:
-            await send_long_message(ctx, f"Something went wrong. Please review the error and maybe submit a bug report.\n```{e}```", MAX_MESSAGE_LENGTH)
-            logging.error(traceback.format_exc())
+            await send_long_message(
+                ctx,
+                f"Something went wrong. "
+                f"Please review the error and maybe submit a bug report.\n```{e}```",
+                MAX_MESSAGE_LENGTH,
+            )
+            logger.exception("An unexpected error happened.")
 
         finally:
-            try:
-                for file in file_names:
-                    os.remove(file)
-                    logging.info(f"Deleted {os.path.basename(file)} at local server")
-            except UnboundLocalError:
-                pass
-
+            cleanup_files(file_names)
     return command

@@ -1,0 +1,163 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import time
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from packages.utilities.errors import HandleAttachmentError
+from packages.utilities.general_utils import generate_unique_file_name
+
+if TYPE_CHECKING:
+    import discord
+    from google.genai import Client
+    from google.genai.types import File
+
+
+logger = logging.getLogger(__name__)
+
+def check_for_file_active(uploaded_file: File) -> bool:
+    """Check if the uploaded file is active on Google servers."""
+    status = uploaded_file.state
+    return status == "ACTIVE"
+
+
+async def wait_for_file_active(uploaded_file_to_check: File) -> None:
+    """Wait until the uploaded file becomes active on Google servers."""
+    start_time = time.monotonic()
+    timeout = 30
+
+    try:
+        while not check_for_file_active(uploaded_file_to_check):
+            if time.monotonic() - start_time >= timeout:
+                logger.warning(
+                    f"Timeout while waiting for file {uploaded_file_to_check.name} "
+                    f"to become active. Skipping Check.",
+                )
+                return
+
+            await asyncio.sleep(1)
+
+    except Exception:
+        logger.exception("Error while waiting for file active!")
+
+
+async def handle_attachment(
+        attachment: discord.Attachment,
+        client: Client,
+) -> tuple[list[str], list[File]]:
+    """Handle a discord.Attachment and uploads them to Google."""
+    file_name = ""
+    try:
+        file_extension = attachment.filename.split(".")[-1]
+        unique_file_name = generate_unique_file_name(file_extension)
+        file_name = f"./temp/{unique_file_name}"
+
+        await attachment.save(Path(file_name))
+        logger.info(f"Saved {attachment.content_type.split('/')[0]} {file_name}")
+
+        file_names = []
+        uploaded_files = []
+
+        file_names.append(file_name)
+        uploaded_file = await asyncio.to_thread(client.files.upload, file=file_name)
+        uploaded_files.append(uploaded_file)
+
+        logger.info(f"Uploaded {uploaded_file.display_name} as {uploaded_file.name}")
+
+        return file_names, uploaded_files
+    except Exception as e:
+        logger.exception("Error when trying to handle attachments.")
+        raise HandleAttachmentError(file_name) from e
+
+
+def save_temp_config(
+    model: str | None = None,
+    system_prompt_data: str | None = None,
+    current_uwu_status: str | None = None,
+    thought: list | None = None,
+    secret: list | str | None = None,
+    tool_use: dict | None = None,
+) -> None:
+    """Save the current configuration to temp_config.json.
+
+    If an argument is None, uses the existing value from the file (if it exists).
+    For the 'secret' argument, if a value is provided, it appends it to the
+    existing list of secrets (or creates a new list if none exists).
+    """
+    temp_config_path = "temp/temp_config.json"
+
+    existing_config = read_temp_config()
+
+    new_config = {
+        "model": model if model is not None else existing_config.get("model", None),
+        "system_prompt": system_prompt_data
+        if system_prompt_data is not None
+        else existing_config.get("system_prompt", None),
+        "uwu": current_uwu_status
+        if current_uwu_status is not None
+        else existing_config.get("uwu", None),
+        "thought": thought
+        if thought is not None
+        else existing_config.get("thought", None),
+        "secret": [],
+        "tools_history": [],
+    }
+
+    if secret is not None:
+        existing_secrets = existing_config.get(
+            "secret", [],
+        )
+        if isinstance(existing_secrets, list):
+            new_config["secret"] = _append_secret(existing_secrets, secret)
+    else:
+        new_config["secret"] = existing_config.get("secret", None)
+
+        if secret is not None:
+            existing_secrets = existing_config.get(
+                "secret", [],
+            )
+            if isinstance(existing_secrets, list):
+                new_config["secret"] = _append_secret(existing_secrets, secret)
+        else:
+            new_config["secret"] = existing_config.get("secret", None)
+
+    if tool_use is not None:
+        if tool_use != {}:
+            existing_history = existing_config.get("tools_history", [])
+            if isinstance(existing_history, list):
+                new_config["tools_history"].append(tool_use)
+            else:
+                new_config["tools_history"] = [tool_use]
+        else:
+            new_config["tools_history"] = []
+
+    else:
+        new_config["tools_history"] = existing_config.get("tools_history", None)
+    with open(temp_config_path, "w") as f:
+        json.dump(new_config, f)
+
+
+def _append_secret(existing_secrets: list, secret: list | str) -> list:
+    if isinstance(secret, list):
+        return existing_secrets + secret
+    return [*existing_secrets, secret]
+
+
+def read_temp_config() -> dict:
+    """Reads the configuration from temp/temp_config.json.
+
+    Returns:
+        dict: A dictionary containing the configuration, or an empty dictionary
+              if the file doesn't exist or contains invalid JSON.
+    """
+    temp_config_path = "temp/temp_config.json"
+
+    try:
+        with open(temp_config_path) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        logger.exception("File cannot be found or JSON syntax is invalid!")
+        return {}  # Return an empty dictionary if the file is missing or invalid

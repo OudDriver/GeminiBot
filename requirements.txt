@@ -21,3 +21,4 @@ regex
 pytest-mock
 docker
 tqdm
+anyio

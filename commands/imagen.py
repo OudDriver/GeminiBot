@@ -1,23 +1,37 @@
-import traceback
-import os
-import logging
+from __future__ import annotations
 
+import logging
+import traceback
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import anyio
 from discord import app_commands
 from discord.ext import commands
 from google.genai.types import (
     GenerateImagesConfig,
 )
-from google.genai import Client
 
-from packages.utils import (
-    send_long_message,
-    send_image,
+from packages.utilities.general_utils import (
     generate_unique_file_name,
+    send_image,
+    send_long_message,
 )
+
+if TYPE_CHECKING:
+    from google.genai import Client
 
 MAX_MESSAGE_LENGTH = 2000
 
-def imagen(genai_client: Client):
+def imagen(genai_client: Client) -> commands.HybridCommand:
+    """Set up the imagen command.
+
+    Args:
+        genai_client: the google.genai client.
+
+    """
+    logger = logging.getLogger(__name__)
+
     @commands.hybrid_command(name="imagen")
     @app_commands.choices(
         aspect_ratio=[
@@ -25,42 +39,53 @@ def imagen(genai_client: Client):
             app_commands.Choice(name="3:4", value="3:4"),
             app_commands.Choice(name="4:3", value="4:3"),
             app_commands.Choice(name="9:16", value="9:16"),
-            app_commands.Choice(name="16:9", value="16:9")
-        ]
+            app_commands.Choice(name="16:9", value="16:9"),
+        ],
     )
-    async def command(ctx: commands.Context, *, prompt: str, aspect_ratio: str | None=None):
-        """
-        Generates a response. Supports file inputs and YouTube links.
+    async def command(
+            ctx: commands.Context,
+            *,
+            prompt: str,
+            aspect_ratio: str | None=None,
+    ) -> None:
+        """Generate an image from a prompt.
 
         Args:
             ctx: The context of the command invocation
             prompt: The prompt to send Imagen
             aspect_ratio: The aspect ratio of the generated image
+
         """
         try:
             async with ctx.typing():
-                logging.info(f"Got Image Generation Prompt {prompt}")
+                logger.info(f"Got Image Generation Prompt {prompt}")
 
-                config = GenerateImagesConfig(number_of_images=1, aspect_ratio=aspect_ratio)
+                config = GenerateImagesConfig(
+                    number_of_images=1,
+                    aspect_ratio=aspect_ratio,
+                )
 
                 response = await genai_client.aio.models.generate_images(
-                    model='imagen-3.0-generate-002',
+                    model="imagen-3.0-generate-002",
                     prompt=prompt,
-                    config=config
+                    config=config,
                 )
 
                 file_names = []
 
-                logging.info("Got Generated Image.")
+                logger.info("Got Generated Image.")
                 for generated_image in response.generated_images:
                     file_name = "./temp/" + generate_unique_file_name("png")
                     image = generated_image.image.image_bytes
 
                     try:
-                        with open(file_name,"wb") as f:
-                            f.write(image)
-                    except Exception as e:
-                        logging.error(e)
+                        async with await anyio.open_file(file_name,"wb") as f:
+                            await f.write(image)
+                    except Exception:
+                        logger.exception(
+                            "An unexpected error happened "
+                            "while trying to save image.",
+                        )
                         return
 
                     file_names.append(file_name)
@@ -68,15 +93,16 @@ def imagen(genai_client: Client):
 
         except Exception as e:
             await send_long_message(
-                ctx, f"A general error happened! `{e}`", MAX_MESSAGE_LENGTH
+                ctx, f"A general error happened! `{e}`", MAX_MESSAGE_LENGTH,
             )
-            logging.error(traceback.format_exc())
+            logger.exception(traceback.format_exc())
 
         finally:
             try:
                 for file in file_names:
-                    os.remove(file)
-                    logging.info(f"Deleted {os.path.basename(file)} at local server")
+                    file_to_del = Path(file)
+                    file_to_del.unlink()
+                    logger.info(f"Deleted {file_to_del.name} at local server")
             except UnboundLocalError:
                 pass
 

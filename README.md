@@ -26,12 +26,12 @@ This project is your implementation of the Gemini LLM in discord. Think of it as
 
 * **Multi-modality:**  Give it audio, video, YouTube links, or just talk to it! Gemini can process it all (check out the supported file formats [here](https://ai.google.dev/gemini-api/docs/prompting_with_media?lang=python#supported_file_formats)). 
 * **YouTube Magic:** Want Gemini to analyze a YouTube video? No problem! ~~I use some big brain tricks with `pytubefix` and `ffmpeg` to make things work. Turns out, I can't use `pytube` because that failed miserably.~~ Turns out, I love Google as they did it for me (with less latency too).
-* **Tool Integrations:** Tired of LLM messing up your math problems or not getting the weather? Or perhaps is *too offline*? This bot can use the power of Wolfram Alpha, DuckDuckGo, and others for accurate and reliable calculations. ~~It can even give you the steps (If you are lucky and the bot doesn't break down. In the event of the bot screwing up WolframAlpha, feel free to submit a bug report, it's not like I'm gonna kill you if you submit useless bug reports.).~~ It's not gonna give you the steps. Turns out, Gemini is really honking lazy.
+* **Tool Integrations:** Tired of LLM messing up your math problems or not getting the weather? Or perhaps is *too offline*? This bot can use the power of Wolfram Alpha, DuckDuckGo, and others for accurate and reliable calculations. ~~It can even give you the steps (If you are lucky and the bot doesn't break down. In the event of the bot screwing up WolframAlpha, feel free to submit a bug report, it's not like I'm going to kill you if you submit useless bug reports.).~~ It's not going to give you the steps. Turns out, Gemini is really honking lazy.
 
 ## Getting Started
 
 1. **Clone the Repo:**  Grab the code and bring it to your machine (make sure you have Python installed). 
-2. ~~**FFmpeg is Your Image Friend:** This project needs FFmpeg to handle all the cool media stuff. Don't worry, I've got instructions in the [Installing FFmpeg](#installing-ffmpeg) section.~~  It absolutely doesn't need FFmpeg, Google has done the heavy lifting for me.
+2. ~~**FFmpeg is Your Image Friend:** This project needs FFmpeg to handle all the cool media stuff. Don't worry, I've got instructions in the Installing FFmpeg section.~~  It absolutely doesn't need FFmpeg, Google has done the heavy lifting for me.
 3. **Install Dependencies:**  Run:
    ```bash
    python setup.py

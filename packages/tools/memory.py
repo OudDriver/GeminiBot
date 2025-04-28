@@ -1,17 +1,20 @@
 import logging
 
-from packages.utils import save_temp_config
+from packages.utilities.file_utils import save_temp_config
 
+logger = logging.getLogger(__name__)
 
-def save_memory(msg: str):
-    """
-    Saves a memory. Use this as much as you need. E.g., when a user is telling a thing they like or a plan they are going to do.
+def save_memory(msg: str) -> None:
+    """Save a memory.
+
+    Use this as much as you need.
+    E.g., when a user is telling a thing they like or a plan they are going to do.
 
     Args:
         msg: The message to save
-    """
 
-    logging.info(f"Saved {msg}")
+    """
+    logger.info(f"Saved {msg}")
 
     with open("memory.txt", "a") as f:
         f.write("\n" + msg)
@@ -21,20 +24,20 @@ def save_memory(msg: str):
             "name": "Search DuckDuckGo",
             "input": msg,
             "output": "",
-        }
+        },
     )
 
-def load_memory():
-    """
-    Loads a memory from a file
+def load_memory() -> str:
+    """Load a memory from a file.
 
     Returns:
         The loaded memory
+
     """
     try:
         with open("memory.txt") as f:
             mem = f.read()
-            logging.info(f"Loaded {mem}")
+            logger.info(f"Loaded {mem}")
             return mem
     except FileNotFoundError:
         return ""

@@ -1,6 +1,6 @@
 from discord.ext import commands
 
-from bot.setup import load_config
+from packages.utilities.file_utils import load_config
 
 config = load_config()
 

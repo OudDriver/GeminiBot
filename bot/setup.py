@@ -16,11 +16,6 @@ from packages.tools.wolfram import wolfram_alpha
 from packages.utilities.code_execution import execute_code
 
 
-def load_config() -> dict[str, str | float]:
-    """Load the configuration from config.json."""
-    with open("config.json") as f:
-        return json.load(f)
-
 def setup_logging() -> None:
     """Configure logging to file and console."""
     # Make folder if not exist

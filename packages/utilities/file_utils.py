@@ -161,3 +161,62 @@ def read_temp_config() -> dict:
     except (FileNotFoundError, json.JSONDecodeError):
         logger.exception("File cannot be found or JSON syntax is invalid!")
         return {}  # Return an empty dictionary if the file is missing or invalid
+
+
+def load_config() -> dict[str, str | float]:
+    """Load the configuration from config.json."""
+    with open("config.json") as f:
+        return json.load(f)
+
+
+def validate_config_files() -> bool:
+    """Validates if the required keys are present in the config file.
+
+    Checks for the existence of essential configuration keys. If the file
+    is missing or if any required key is not found in the loaded config,
+    it logs an error detailing the issue.
+
+    Returns:
+        True if the config file exists and contains all required keys.
+        Otherwise, False.
+    """
+    required_keys = [
+        "GeminiAPIkey",
+        "DiscordToken",
+        "OwnerID",
+        "ModelNames",
+        "SystemPrompts",
+        "HarmBlockThreshold",
+        "Temperature",
+    ]
+
+    try:
+        config = load_config()
+
+        missing_keys = [key for key in required_keys if key not in config]
+
+        if missing_keys:
+            # Report all missing keys at once
+            logger.error(
+                f"Config validation failed. File 'config.json' is missing "
+                f"the following required key(s): {', '.join(missing_keys)}",
+            )
+            return False
+        return True
+
+    except FileNotFoundError:
+        # Log specifically that the file is missing
+        logger.exception(
+            "Config file 'config.json' not found. "
+            "Please ensure it exists and is correctly named.",
+        )
+        return False
+    except json.JSONDecodeError:
+        logger.exception(
+            "Config validation failed "
+            "because 'config.json' could not be parsed (invalid JSON).",
+        )
+        return False
+    except Exception:
+        logger.exception("An unexpected error occurred during config validation.")
+        return False

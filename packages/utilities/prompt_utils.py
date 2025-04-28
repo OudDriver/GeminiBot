@@ -22,7 +22,6 @@ from google.genai.types import (
     Tool,
 )
 
-from bot.setup import load_config
 from packages.maps import (
     BLOCKED_CATEGORY,
     HARM_BLOCK_CATEGORY,
@@ -36,7 +35,7 @@ from packages.utilities.file_utils import (
     handle_attachment,
     read_temp_config,
     save_temp_config,
-    wait_for_file_active,
+    wait_for_file_active, load_config,
 )
 from packages.utilities.general_utils import (
     clean_text,

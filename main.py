@@ -18,7 +18,7 @@ def main() -> None:
 
     logger = logging.getLogger(__name__)
 
-    if validate_config_files():
+    if not validate_config_files():
         logger.fatal("Config files isn't complete. Please check again!")
         sys.exit(1)
 

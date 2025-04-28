@@ -23,6 +23,9 @@ def load_config() -> dict[str, str | float]:
 
 def setup_logging() -> None:
     """Configure logging to file and console."""
+    # Make folder if not exist
+    Path("logs").mkdir(exist_ok=True)
+
     # Define log format
     log_format = (
         "%(asctime)s - %(levelname)s - %(name)s - %(filename)s:%(lineno)d - %(message)s"

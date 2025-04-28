@@ -33,7 +33,6 @@ def setup_logging() -> None:
     file = folder / Path("installation.log")
 
     folder.mkdir(parents=True, exist_ok=True)
-    file.touch()
 
     # Get the root logger
     logger = logging.getLogger()
@@ -48,7 +47,6 @@ def setup_logging() -> None:
     file_handler.setLevel(logging.DEBUG)
     logger.addHandler(file_handler)
 
-    # --- Console (Stream) Handler ---
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
     stream_handler.setLevel(logging.INFO)

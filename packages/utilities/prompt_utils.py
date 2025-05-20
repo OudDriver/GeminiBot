@@ -19,6 +19,7 @@ from google.genai.types import (
     HarmCategory,
     Part,
     SafetySetting,
+    ThinkingConfig,
     Tool,
 )
 
@@ -33,9 +34,10 @@ from packages.tex import check_tex, render_latex, split_tex
 from packages.utilities.errors import HandleAttachmentError
 from packages.utilities.file_utils import (
     handle_attachment,
+    load_config,
     read_temp_config,
     save_temp_config,
-    wait_for_file_active, load_config,
+    wait_for_file_active,
 )
 from packages.utilities.general_utils import (
     clean_text,
@@ -94,6 +96,7 @@ def generate_config(
         auto_func_call: AutomaticFunctionCallingConfig | None,
         response_modalities: list[str],
         temperature: float | None,
+        thinking: bool | None,
 ) -> GenerateContentConfig:
     """Generate a config for Gemini.
 
@@ -104,12 +107,16 @@ def generate_config(
         auto_func_call: an automatic function calling config
         response_modalities: how you want Gemini to respond
         temperature: the temperature you want to give the LLM
+        thinking: Whether to enable thinking.
+                  Thinking budget will be taken from temp_config
 
     Returns:
         A GenerateContentConfig with system instructions, tools, safety settings,
-        automatic function calling, response_modalities, and temperature.
+        automatic function calling, response_modalities, temperature,
+        and thinking_config.
 
     """
+    temp_config = read_temp_config()
     return GenerateContentConfig(
         system_instruction=system_instructions,
         tools=tool_func_call,
@@ -117,6 +124,10 @@ def generate_config(
         automatic_function_calling=auto_func_call,
         response_modalities=response_modalities,
         temperature=temperature,
+        thinking_config=ThinkingConfig(
+            include_thoughts=temp_config["thinking"],
+            thinking_budget=temp_config["thinking_budget"],
+        ) if thinking else None,
     )
 
 
@@ -359,6 +370,7 @@ def prepare_api_config(
         auto_func_call,
         response_modalities,
         temperature,
+        model == "gemini-2.5-flash-preview-04-17",
     )
     return model, api_config, safety_setting, temp_config
 
@@ -486,7 +498,7 @@ def process_youtube_links(message: str, final_prompt: list) -> None:
 
 
 async def send_message_and_handle_status(
-    chat: AsyncChat, # Add chat type hint
+    chat: AsyncChat,
     final_prompt: list,
     ctx: commands.Context,
     safety_setting: str,
@@ -500,12 +512,12 @@ async def send_message_and_handle_status(
 
     Returns:
         A tuple (response, candidates, first_candidate, finish_reason) if successful,
-        or None if processing should stop due to an handled finish reason.
+        or None if processing should stop due to a handled finish reason.
 
     """
     response = await chat.send_message(final_prompt)
     candidates = response.candidates
-    if not candidates: # Handle case with no candidates (rare, but possible)
+    if not candidates:
          logger.warning("API returned no candidates.")
          await ctx.reply("The AI did not return a valid response.")
          return None
@@ -560,13 +572,16 @@ async def process_response_parts(
          await ctx.reply("The AI response had no content.")
          return output_file_names
 
-    first_candidate = candidates[0] # Ensure first_candidate is available
+    first_candidate = candidates[0]
 
     for part in first_candidate.content.parts:
-        # handle_output might create local files, collect their names for cleanup
         file_name_list = await handle_output(
-            ctx, part, candidates,
-            finish_reason, temp_config, tools,
+            ctx,
+            part,
+            candidates,
+            finish_reason,
+            temp_config,
+            tools,
         )
         output_file_names.extend(file_name_list)
 

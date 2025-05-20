@@ -105,6 +105,8 @@ def get_initial_state(config: dict) -> dict:
                 "thought": "",
                 "secret": [],
                 "tools_history": [],
+                "thinking": True,
+                "thinking_budget": 0, # 0 means auto thinking length
             }, f)
 
     return {

@@ -5,17 +5,19 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 from discord import app_commands
+from discord.ext import commands
 
-from packages.utilities.file_utils import save_temp_config
+from packages.utilities.file_utils import read_temp_config, save_temp_config
 
 if TYPE_CHECKING:
-    from discord.ext import commands
     from discord.ext.commands import Bot
 
 logger = logging.getLogger(__name__)
 
 async def _handle_toggle_sys_prompt(
-    ctx: commands.Context, initial_state: dict[str, Any], index: int | None,
+    ctx: commands.Context,
+    initial_state: dict[str, Any],
+    index: int | None,
 ) -> None:
     """Handles toggling the system prompt."""
     system_prompts = initial_state.get("system_prompts", [])
@@ -53,7 +55,8 @@ async def _handle_toggle_sys_prompt(
 
 async def _handle_toggle_model(
     ctx: commands.Context,
-    client: Bot, initial_state: dict[str, Any],
+    client: Bot,
+    initial_state: dict[str, Any],
     index: int | None,
 ) -> None:
     """Handles toggling the model."""
@@ -138,31 +141,113 @@ async def _handle_toggle_tools(
     await ctx.send(f"Switched to toolset: {tool_name}.")
 
 
-# --- Main Command Setup ---
+async def _handle_toggle_thinking(
+    ctx: commands.Context,
+) -> None:
+    """Handles toggling whether the model will think or not."""
+    temp_config = read_temp_config()
+
+    thinking = temp_config.get("thinking", None)
+    if thinking is None:
+        logger.error("Thinking key missing!")
+        return
+
+    if not thinking:
+        logger.info("Enabled thinking.")
+        await ctx.send("Enabled thinking.")
+        save_temp_config(thinking=True)
+        return
+
+    logger.info("Disabled thinking.")
+    await ctx.send("Disabled thinking.")
+    save_temp_config(thinking=False)
+
+
+async def _handle_thinking_budget(
+    ctx: commands.Context,
+    thinking_budget: int | None,
+) -> None:
+    """Handles changing the thinking budget."""
+    temp_config = read_temp_config()
+
+    budget = temp_config.get("thinking_budget", None)
+    if budget is None:
+        logger.error("thinking_budget key missing!")
+        return
+
+    if thinking_budget is None:
+        logger.info("Set thinking budget to auto.")
+        await ctx.send("Thinking budget is set to auto (turned off).")
+        save_temp_config(thinking_budget=0)
+        return
+
+    logger.info(f"Thinking budget is {thinking_budget}.")
+    await ctx.send(f"Thinking budget is now {thinking_budget}.")
+    save_temp_config(thinking_budget=thinking_budget)
+
+
+async def _handle_toggle_uwu(
+    ctx: commands.Context,
+    initial_state: dict,
+) -> None:
+    initial_state["current_uwu_status"] = not initial_state["current_uwu_status"]
+    save_temp_config(
+        initial_state["model"],
+        initial_state["system_prompt_data"],
+        initial_state["current_uwu_status"],
+    )
+
+    if initial_state["current_uwu_status"]:
+        await ctx.reply(
+            "Enabled Uwuifier. Beware that asking it for code will not work.",
+        )
+        logger.info("Enabled Uwuifier.")
+    else:
+        await ctx.reply("Disabled Uwuifier.")
+        logger.info("Disabled Uwuifier.")
+
+
 
 def setup_toggle_command(client: Bot, initial_state: dict[str, Any]) -> None:
     """Set up the toggle command."""
     @client.hybrid_command(name="toggle")
+    @commands.has_permissions(manage_messages=True)
     @app_commands.choices(toggles=[
         app_commands.Choice(name="System Prompt", value="sys"),
         app_commands.Choice(name="Model", value="model"),
         app_commands.Choice(name="Tools", value="tools"),
+        app_commands.Choice(name="Thinking", value="thinking"),
+        app_commands.Choice(name="Thinking Budget", value="thinking_budget"),
+        app_commands.Choice(name="UwU", value="uwu"),
     ])
     async def toggle(
             ctx: commands.Context,
             toggles: str,
             index: int | None = None,
+            thinking_budget: int | None = None,
     ) -> None:
-        """Toggle system prompt, model, or tools for the bot."""
+        """Toggle system prompt, model, or tools for the bot.
+
+        Args:
+            ctx: The context of the command invocation.
+            toggles: What to toggle.
+            index: The index to set. Optional.
+            thinking_budget: The thinking budget to set if what you're going to set
+                             is the thinking budget.
+        """
         toggle_handlers = {
             "sys": lambda: _handle_toggle_sys_prompt(ctx, initial_state, index),
             "model": lambda: _handle_toggle_model(ctx, client, initial_state, index),
             "tools": lambda: _handle_toggle_tools(ctx, initial_state, index),
+            "thinking": lambda: _handle_toggle_thinking(ctx),
+            "thinking_budget": lambda: _handle_thinking_budget(ctx, thinking_budget),
+            "uwu": lambda : _handle_toggle_uwu(ctx, initial_state),
         }
 
         handler = toggle_handlers.get(toggles)
         if handler:
             await handler()
-        else:
-            logger.warning(f"Invalid toggle value received: {toggles}")
-            await ctx.reply("Invalid toggle option specified.", ephemeral=True)
+            return
+
+        logger.warning(f"Invalid toggle value received: {toggles}")
+        await ctx.reply("Invalid toggle option specified.", ephemeral=True)

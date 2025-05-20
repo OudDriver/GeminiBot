@@ -8,7 +8,6 @@ from commands.sync import sync
 from commands.thought import thought
 from commands.toggle import setup_toggle_command
 from commands.usage import usage
-from commands.uwuify import setup_uwu_command
 from commands.voice import leave, voice
 from commands.which import setup_which_command
 
@@ -23,7 +22,6 @@ def register_commands(
 
     Those include uwu, toggle, which, and list.
     """
-    setup_uwu_command(client, initial_state)
     setup_toggle_command(client, initial_state)
     setup_which_command(client, initial_state, config)
     setup_list_command(client, initial_state)

@@ -15,7 +15,7 @@ def install_latex_debian() -> bool | None:
     logger.info("Detected Debian-based distribution (apt).")
     if run_command(["apt-get", "update", "-y"]):
         logger.info("Attempting to install texlive-bin...")
-        if run_command(["apt-get", "install", "-y", "texlive-bin"]):
+        if run_command(["apt-get", "install", "-y", "texlive-bin", "texlive-type1cm"]):
             return True
         logger.error("Failed to install texlive-bin.")
         return None
@@ -37,7 +37,7 @@ def install_latex_rhel() -> bool | None:
     if pkg_manager:
         logger.info(f"Using {pkg_manager} package manager.")
         logger.info("Attempting to install texlive...")
-        if run_command([pkg_manager, "install", "-y", "texlive"]):
+        if run_command([pkg_manager, "install", "-y", "texlive", "texlive-type1cm"]):
             return True
         logger.error("Failed to install texlive.")
         return None
@@ -49,7 +49,16 @@ def install_latex_arch() -> bool | None:
     """Installs LaTeX on Arch-based distribution."""
     logger.info("Detected Arch-based distribution (pacman).")
     logger.info("Attempting to sync repositories and install texlive-bin...")
-    if run_command(["pacman", "-Syu", "--noconfirm", "--needed", "texlive-bin"]):
+    if run_command(
+        [
+            "pacman",
+            "-Syu",
+            "--noconfirm",
+            "--needed",
+            "texlive-bin",
+            "texlive-type1cm",
+        ],
+    ):
          return True
     logger.error("Failed to sync repositories or install texlive-bin.")
     return None
@@ -59,7 +68,7 @@ def install_latex_suse() -> bool | None:
     """Installs LaTeX on SUSE-based distribution."""
     logger.info("Detected SUSE-based distribution (zypper).")
     logger.info("Attempting to install texlive...")
-    if run_command(["zypper", "install", "--non-interactive", "texlive"]):
+    if run_command(["zypper", "install", "--non-interactive", "texlive", "texlive-type1cm"]):
         return True
 
     logger.error("Failed to install texlive.")
@@ -71,7 +80,7 @@ def install_latex_alpine() -> bool | None:
     logger.info("Detected Alpine Linux (apk).")
     if run_command(["apk", "update"]):
         logger.info("Attempting to install texlive...")
-        if run_command(["apk", "add", "texlive"]):
+        if run_command(["apk", "add", "texlive", "texlive-type1cm"]):
             return True
         logger.error("Failed to install texlive.")
         return None

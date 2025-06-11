@@ -60,3 +60,33 @@ YOUTUBE_PATTERN = regex.compile(
     r"?:\.php)?(?:\?.*v=|\/))([a-zA-Z0-9\_-]+)",
 )
 MAX_MESSAGE_LENGTH = 2000
+
+# I couldn't fit all voices here since Discord has a hard limit
+# For the amount of choices I can put.
+TTS_VOICES = [
+    {"name": "Zephyr", "personality": "Bright"},
+    {"name": "Puck", "personality": "Upbeat"},
+    {"name": "Charon", "personality": "Informative"},
+    {"name": "Kore", "personality": "Firm"},
+    {"name": "Fenrir", "personality": "Excitable"},
+    {"name": "Leda", "personality": "Youthful"},
+    {"name": "Aoede", "personality": "Breezy"},
+    {"name": "Callirrhoe", "personality": "Easy-going"},
+    {"name": "Enceladus", "personality": "Breathy"},
+    {"name": "Iapetus", "personality": "Clear"},
+    {"name": "Algieba", "personality": "Smooth"},
+    {"name": "Erinome", "personality": "Clear"},
+    {"name": "Algenib", "personality": "Gravelly"},
+    {"name": "Rasalgethi", "personality": "Informative"},
+    {"name": "Laomedeia", "personality": "Upbeat"},
+    {"name": "Achernar", "personality": "Soft"},
+    {"name": "Schedar", "personality": "Even"},
+    {"name": "Gacrux", "personality": "Mature"},
+    {"name": "Pulcherrima", "personality": "Forward"},
+    {"name": "Achird", "personality": "Friendly"},
+    {"name": "Zubenelgenubi", "personality": "Casual"},
+    {"name": "Vindemiatrix", "personality": "Gentle"},
+    {"name": "Sadachbia", "personality": "Lively"},
+    {"name": "Sadaltager", "personality": "Knowledgeable"},
+    {"name": "Sulafat", "personality": "Warm"},
+]

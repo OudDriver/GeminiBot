@@ -4,6 +4,7 @@ from google.genai import Client
 from commands.imagen import imagen
 from commands.list import setup_list_command
 from commands.secret import secret
+from commands.speechify import speechify
 from commands.sync import sync
 from commands.thought import thought
 from commands.toggle import setup_toggle_command
@@ -33,3 +34,4 @@ def register_commands(
     client.add_command(leave)
     client.add_command(usage)
     client.add_command(imagen(genai_client))
+    client.add_command(speechify(genai_client))

@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import time
+import wave
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -244,3 +245,28 @@ def validate_config_files() -> bool:
     except Exception:
         logger.exception("An unexpected error occurred during config validation.")
         return False
+
+
+def save_wave_file(
+    filename: str,
+    pcm: bytes,
+    channels: int = 1,
+    rate: int = 24000,
+    sample_width: int = 2,
+) -> None:
+    """Saves PCM audio data to a WAVE file.
+
+    Args:
+        filename: The name of the file to save the audio to.
+        pcm: The PCM audio data as bytes.
+        channels: The number of audio channels (e.g., 1 for mono, 2 for stereo).
+                  Defaults to 1.
+        rate: The sampling rate in Hz (frames per second). Defaults to 2400.
+        sample_width: The sample width in bytes (e.g., 2 for 16-bit audio).
+                      Defaults to 2.
+    """
+    with wave.open(filename, "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(sample_width)
+        wf.setframerate(rate)
+        wf.writeframes(pcm)

@@ -12,16 +12,15 @@ from google.genai.types import (
     GenerateImagesConfig,
 )
 
+from packages.maps import MAX_MESSAGE_LENGTH
 from packages.utilities.general_utils import (
     generate_unique_file_name,
-    send_image,
+    send_file,
     send_long_message,
 )
 
 if TYPE_CHECKING:
     from google.genai import Client
-
-MAX_MESSAGE_LENGTH = 2000
 
 def imagen(genai_client: Client) -> commands.HybridCommand:
     """Set up the imagen command.
@@ -46,7 +45,7 @@ def imagen(genai_client: Client) -> commands.HybridCommand:
             ctx: commands.Context,
             *,
             prompt: str,
-            aspect_ratio: str | None=None,
+            aspect_ratio: str | None = None,
     ) -> None:
         """Generate an image from a prompt.
 
@@ -78,31 +77,25 @@ def imagen(genai_client: Client) -> commands.HybridCommand:
                     file_name = "./temp/" + generate_unique_file_name("png")
                     image = generated_image.image.image_bytes
 
-                    try:
-                        async with await anyio.open_file(file_name,"wb") as f:
-                            await f.write(image)
-                    except Exception:
-                        logger.exception(
-                            "An unexpected error happened "
-                            "while trying to save image.",
-                        )
-                        return
+                    async with await anyio.open_file(file_name,"wb") as f:
+                        await f.write(image)
 
                     file_names.append(file_name)
-                    await send_image(ctx, file_name)
+                    await send_file(ctx, file_name)
 
         except Exception as e:
             await send_long_message(
-                ctx, f"A general error happened! `{e}`", MAX_MESSAGE_LENGTH,
+                ctx,
+                f"A general error happened! `{e}`",
+                MAX_MESSAGE_LENGTH,
             )
             logger.exception(traceback.format_exc())
 
         finally:
             try:
                 for file in file_names:
-                    file_to_del = Path(file)
-                    file_to_del.unlink()
-                    logger.info(f"Deleted {file_to_del.name} at local server")
+                    Path(file).unlink()
+                    logger.info(f"Deleted {file} at local server")
             except UnboundLocalError:
                 pass
 

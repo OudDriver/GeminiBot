@@ -64,7 +64,7 @@ class Uwuifier:
 
     # Use built-in list type hint
     _FACES: ClassVar[list[str]] = [
-        "(・`ω´・)", ";;w;;", "OwO", "UwU", ">w<", "^w^", "ÚwÚ", "^-^", ":3", "x3",  # noqa: RUF001
+        "(・\\`ω´・)", ";;w;;", "OwO", "UwU", ">w<", "^w^", "ÚwÚ", "^-^", ":3", "x3",  # noqa: RUF001
     ]
     _EXCLAMATIONS: ClassVar[list[str]] = ["!?", "?!!", "?!?1", "!!11", "?!?!", "1!!1!"]
     _ACTIONS: ClassVar[list[str]] = [

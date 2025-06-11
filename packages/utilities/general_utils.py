@@ -186,7 +186,7 @@ async def send_long_message(ctx: Context, message: str, length: int) -> None:
         await ctx.reply(chunk)
 
 
-async def send_image(ctx: Context, file_name: str) -> None:
+async def send_file(ctx: Context, file_name: str) -> None:
     """Send an image from a path.
 
     Args:

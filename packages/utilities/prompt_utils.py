@@ -20,7 +20,7 @@ from google.genai.types import (
     Part,
     SafetySetting,
     ThinkingConfig,
-    Tool,
+    Tool, SpeechConfig, VoiceConfig, PrebuiltVoiceConfig,
 )
 
 from packages.maps import (
@@ -30,7 +30,7 @@ from packages.maps import (
     MAX_MESSAGE_LENGTH,
     YOUTUBE_PATTERN,
 )
-from packages.tex import check_tex, render_latex, split_tex
+from packages.utilities.tex_utilities import check_tex, render_latex, split_tex
 from packages.utilities.errors import HandleAttachmentError
 from packages.utilities.file_utils import (
     handle_attachment,
@@ -44,7 +44,7 @@ from packages.utilities.general_utils import (
     create_grounding_markdown,
     generate_unique_file_name,
     repair_links,
-    send_image,
+    send_file,
     send_long_message,
     send_long_messages,
 )
@@ -269,7 +269,7 @@ async def handle_output(
             await f.write(part.inline_data.data)
 
         file_names.append(file_name)
-        await send_image(ctx, file_name)
+        await send_file(ctx, file_name)
 
     if part.text is not None:
         text, thought_matches, secret_matches = clean_text(part.text)
@@ -597,3 +597,24 @@ def cleanup_files(file_names: list[str]) -> None:
                 logger.info(f"Deleted {Path(file).name} at local server")
             except OSError:
                  logger.exception(f"Failed to delete file {file}.")
+
+
+def generate_audio_config(voice_name: str) -> GenerateContentConfig:
+    """Generates a GenerateContentConfig for TTS models.
+
+    Args:
+        voice_name: The voice to use.
+
+    Returns:
+        GenerateContentConfig for a TTS.
+    """
+    return GenerateContentConfig(
+        response_modalities=["AUDIO"],
+        speech_config=SpeechConfig(
+            voice_config=VoiceConfig(
+                prebuilt_voice_config=PrebuiltVoiceConfig(
+                    voice_name=voice_name,
+                ),
+            ),
+        ),
+    )

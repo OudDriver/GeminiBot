@@ -6,11 +6,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import anyio
+import discord
 from discord import app_commands
 from discord.ext import commands
-from google.genai.types import (
-    GenerateImagesConfig,
-)
+from google.genai.types import GenerateImagesConfig
 
 from packages.maps import MAX_MESSAGE_LENGTH
 from packages.utilities.general_utils import (
@@ -21,15 +20,17 @@ from packages.utilities.general_utils import (
 
 if TYPE_CHECKING:
     from google.genai import Client
+    from main import GeminiBot
 
-def imagen(genai_client: Client) -> commands.HybridCommand:
-    """Set up the imagen command.
+logger = logging.getLogger(__name__)
 
-    Args:
-        genai_client: the google.genai client.
 
-    """
-    logger = logging.getLogger(__name__)
+class ImagenCog(commands.Cog, name="Imagen"):
+    """A cog for generating images using an AI model."""
+
+    def __init__(self, bot: "GeminiBot", genai_client: Client):
+        self.bot = bot
+        self.genai_client = genai_client
 
     @commands.hybrid_command(name="imagen")
     @app_commands.choices(
@@ -41,7 +42,8 @@ def imagen(genai_client: Client) -> commands.HybridCommand:
             app_commands.Choice(name="16:9", value="16:9"),
         ],
     )
-    async def command(
+    async def imagen_command(
+            self,
             ctx: commands.Context,
             *,
             prompt: str,
@@ -53,8 +55,8 @@ def imagen(genai_client: Client) -> commands.HybridCommand:
             ctx: The context of the command invocation
             prompt: The prompt to send Imagen
             aspect_ratio: The aspect ratio of the generated image
-
         """
+        file_names = [] # Initialize here to ensure it's always defined for finally block
         try:
             async with ctx.typing():
                 logger.info(f"Got Image Generation Prompt {prompt}")
@@ -64,21 +66,31 @@ def imagen(genai_client: Client) -> commands.HybridCommand:
                     aspect_ratio=aspect_ratio,
                 )
 
-                response = await genai_client.aio.models.generate_images(
-                    model="imagen-3.0-generate-002",
+                response = await self.genai_client.aio.models.generate_images(
+                    model="imagen-3.0-generate-002", # Model is hardcoded
                     prompt=prompt,
                     config=config,
                 )
 
-                file_names = []
+                if not response.generated_images:
+                    await send_long_message(
+                        ctx,
+                        "Image generation failed: No images returned.",
+                        MAX_MESSAGE_LENGTH,
+                    )
+                    return
 
                 logger.info("Got Generated Image.")
                 for generated_image in response.generated_images:
+                    if not generated_image.image or not generated_image.image.image_bytes:
+                        logger.warning("Generated image part missing image_bytes.")
+                        continue # Skip if image data is missing
+
                     file_name = "./temp/" + generate_unique_file_name("png")
-                    image = generated_image.image.image_bytes
+                    image_bytes = generated_image.image.image_bytes
 
                     async with await anyio.open_file(file_name,"wb") as f:
-                        await f.write(image)
+                        await f.write(image_bytes)
 
                     file_names.append(file_name)
                     await send_file(ctx, file_name)
@@ -89,14 +101,18 @@ def imagen(genai_client: Client) -> commands.HybridCommand:
                 f"A general error happened! `{e}`",
                 MAX_MESSAGE_LENGTH,
             )
-            logger.exception(traceback.format_exc())
+            logger.exception(f"An exception happened during imagen command: {traceback.format_exc()}")
 
         finally:
-            try:
-                for file in file_names:
+            for file in file_names: # file_names is always defined now
+                try:
                     Path(file).unlink()
                     logger.info(f"Deleted {file} at local server")
-            except UnboundLocalError:
-                pass
+                except OSError as e:
+                    logger.warning(f"Error deleting file {file}: {e}")
+                except Exception as e:
+                    logger.exception(f"Unexpected error during file cleanup for {file}.")
 
-    return command
+async def setup(bot: "GeminiBot"):
+    """Adds the ImagenCog to the bot."""
+    await bot.add_cog(ImagenCog(bot, bot.genai_client))

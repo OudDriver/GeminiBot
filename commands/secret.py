@@ -1,23 +1,28 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+import discord
 from discord.ext import commands
 
 from packages.utilities.file_utils import read_temp_config
 
+if TYPE_CHECKING:
+    from main import GeminiBot
 
-@commands.hybrid_command()
-@commands.has_permissions(administrator=True)
-async def secret(ctx: commands.Context) -> None:
-    """Show the bot's kept secret.
+class SecretCog(commands.Cog, name="Secret"):
+    """A cog for displaying the bot's configured secret (developer/admin only)."""
 
-    Args:
-        ctx: The context of the command invocation
+    def __init__(self, bot: "GeminiBot"):
+        self.bot = bot
 
-    """
-    temp_config = read_temp_config()
+    @commands.hybrid_command(name="secret")
+    @commands.has_permissions(administrator=True) # Check permissions at the command level
+    async def secret_command(self, ctx: commands.Context) -> None:
+        temp_config = read_temp_config()
 
-    secrets = temp_config["secret"]
+        secrets = temp_config.get("secret", "None") # Default to "None" if key not found
 
-    if not secrets:
-        await ctx.send("None", ephemeral=True)
-        return
+        await ctx.send(secrets, ephemeral=True) # Always ephemeral for secrets
 
-    await ctx.send(secrets, ephemeral=True)
+async def setup(bot: "GeminiBot"):
+    """Adds the SecretCog to the bot."""
+    await bot.add_cog(SecretCog(bot))

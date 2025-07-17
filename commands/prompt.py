@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, List
 
-from google.genai import Client, errors
+import discord
+from discord.ext import commands
+from google.genai import errors
+from google.genai.types import Content, Tool
 
 from packages.maps import MAX_MESSAGE_LENGTH, YOUTUBE_PATTERN
 from packages.tools.memory import load_memory
-from packages.utilities.file_utils import save_temp_config
+from packages.utilities.file_utils import save_temp_config, read_temp_config
 from packages.utilities.general_utils import send_long_message
 from packages.utilities.prompt_utils import (
     cleanup_files,
@@ -23,94 +26,85 @@ from packages.utilities.prompt_utils import (
 )
 
 if TYPE_CHECKING:
-    from discord.ext import commands
-    from google.genai.types import (
-        Content,
-        Tool,
-    )
+    from google.genai import Client
+    from main import GeminiBot
 
-latest_token_count = 0
-ctx_glob = None # Only this file will modify ctx_glob
-memory = []
 logger = logging.getLogger(__name__)
 
 
-def save_memory(history: list[Content]) -> None:
-    """Save the history to a global variable."""
-    global memory
-    memory = history
+class PromptCog(commands.Cog, name="Prompt"):
+    """A cog for handling AI prompts and chat memory."""
 
+    def __init__(self, bot: "GeminiBot", genai_client: Client):
+        self.bot = bot
+        self.genai_client = genai_client
+        self.memory: List[Content] = []
 
-def clear_memory() -> None:
-    """Clear global variable."""
-    memory.clear()
+    def _save_memory(self, history: List[Content]) -> None:
+        """Save the history to the cog's memory."""
+        self.memory = history
 
+    def _clear_memory(self) -> None:
+        """Clear the cog's memory."""
+        self.memory.clear()
 
-def get_memory() -> list:
-    """Get the global variable."""
-    return memory
+    def _get_memory(self) -> List:
+        """Get the cog's memory."""
+        return self.memory
 
-
-async def handle_clear(ctx: commands.Context) -> None:
-    """Handle the clear command.
-
-    Args:
-        ctx: the context of the command invocation
-
-    """
-    global latest_token_count
-    latest_token_count = 0
-    if ctx.author.guild_permissions.administrator:
-        clear_memory()
-        save_temp_config(tool_use={})
+    async def _handle_clear(self, ctx: commands.Context) -> None:
+        """Handle the clear command logic."""
+        self.bot.latest_token_count = 0
+        if ctx.author.guild_permissions.administrator:
+            self._clear_memory()
+            save_temp_config(tool_use={})
+            await ctx.reply(
+                "Alright, I have cleared my context. What are we gonna talk about?",
+            )
+            logger.info("Cleared context.")
+            return
         await ctx.reply(
-            "Alright, I have cleared my context. What are we gonna talk about?",
+            "You don't have the necessary permissions for this!",
+            ephemeral=True,
         )
-        logger.info("Cleared context.")
-        return
-    await ctx.reply(
-        "You don't have the necessary permissions for this!",
-        ephemeral=True,
-    )
-    return
 
-def prompt(tools: list[Tool], genai_client: Client) -> Callable:
-    """A prompt wrapper function.
-
-    Args:
-        tools: A list of tools for the model to use.
-               E.g. Code Execution or custom function calls.
-        genai_client: The genai client to use.
-
-    Returns:
-        A prompt command.
-    """
-    async def command(ctx: commands.Context) -> None:
-        global ctx_glob, latest_token_count
+    # REMOVED: @commands.hybrid_command(name="prompt")
+    async def handle_ai_interaction(self, ctx: commands.Context) -> None: # Renamed from prompt_command
+        """Handles AI interaction based on a Discord message context (triggered by mention/reply)."""
         file_names = []
 
         try:
-            curr_memory = get_memory()
-            message = ctx.message.content.replace(f"<@{ctx.bot.user.id}>", "").strip()
+            curr_memory = self._get_memory()
+            # This line is crucial for extracting the user's message when mentioned/replied
+            message = ctx.message.content.replace(f"<@{self.bot.user.id}>", "").strip()
             if await validate_invocation(ctx, message):
                 return
             now = datetime.now(timezone.utc)
             formatted_time = now.strftime("%A, %B %d, %Y %H:%M:%S UTC")
-            model, api_config, safety_setting, temp_config = prepare_api_config(tools)
+
+            # Get active tools based on what's set in temp_config
+            temp_config = read_temp_config()
+            active_tools_name = temp_config.get("active_tools_name", "Nothing")
+            # Lookup the actual tool definitions from bot's static config
+            configured_tools = self.bot.config.get("Tools", {})
+            active_tools: List[Tool] = configured_tools.get(active_tools_name, [])
+
+            # `prepare_api_config` will read model, safety, thinking from temp_config
+            model, api_config, safety_setting, temp_config_for_prompt = prepare_api_config(active_tools)
+            # Use `temp_config_for_prompt` from `prepare_api_config` for consistency, as it's fresh.
 
             async with ctx.typing():
                 if message.lower() == "{clear}":
-                    await handle_clear(ctx)
+                    await self._handle_clear(ctx)
                     return
 
-                chat = create_chat(genai_client, model, api_config, curr_memory)
-                ctx_glob = ctx
+                chat = create_chat(self.genai_client, model, api_config, curr_memory)
 
                 logger.info(f"Received Input With Prompt: {message}")
                 final_prompt = [YOUTUBE_PATTERN.sub("", message)]
                 attachment_file_names = await process_attachments(
                     ctx,
-                    genai_client,
+                    self.genai_client,
                     final_prompt,
                 )
 
@@ -137,9 +131,9 @@ def prompt(tools: list[Tool], genai_client: Client) -> Callable:
                 )
 
                 response, candidates, first_candidate, finish_reason = response_result
-                latest_token_count = response.usage_metadata.total_token_count
+                self.bot.latest_token_count = response.usage_metadata.total_token_count
 
-                save_memory(chat._curated_history)
+                self._save_memory(chat._curated_history)
 
                 logger.info("Got Response.")
 
@@ -147,29 +141,17 @@ def prompt(tools: list[Tool], genai_client: Client) -> Callable:
                     ctx,
                     candidates,
                     finish_reason,
-                    temp_config,
-                    tools,
+                    temp_config_for_prompt,
+                    active_tools,
                 )
 
                 file_names.extend(output_file_names)
 
-        except (
-            errors.ClientError,
-        ) as e:
-            message = e
-            try:
-                message = f"{e.code} {e.status}: {e.message}."
-            except AttributeError:
-                pass
-
+        except errors.ClientError as e:
+            message_str = f"{e.code} {e.status}: {e.message}." if hasattr(e, 'code') else str(e)
             await send_long_message(
                 ctx,
-                "Something went wrong on our side. "
-                f"\n{message}"
-                if not isinstance(message, Exception) else
-                "Something went wrong on our side. "
-                "Please submit a bug report at the GitHub repo for this bot, "
-                f"or ping the creator.\n```{message}```",
+                f"Something went wrong on our side.\n{message_str}",
                 MAX_MESSAGE_LENGTH,
             )
             logger.exception("An error happened at our side.")
@@ -196,4 +178,7 @@ def prompt(tools: list[Tool], genai_client: Client) -> Callable:
 
         finally:
             cleanup_files(file_names)
-    return command
+
+async def setup(bot: "GeminiBot"):
+    """Adds the PromptCog to the bot."""
+    await bot.add_cog(PromptCog(bot, bot.genai_client))

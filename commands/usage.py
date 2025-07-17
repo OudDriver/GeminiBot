@@ -3,7 +3,7 @@ from discord.ext import commands
 
 @commands.hybrid_command()
 async def usage(ctx: commands.Context) -> None:
-    """Syncs slash commands.
+    """Shows the total token count for the current session.
 
     Args:
         ctx: The context of the command invocation

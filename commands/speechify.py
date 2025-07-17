@@ -67,6 +67,14 @@ def speechify(genai_client: Client) -> commands.HybridCommand:
                     config=config,
                 )
 
+                if response.candidates[0].content is None:
+                    logger.error(f"content is None!\n{response.candidates[0]}")
+                    await ctx.send(
+                        "There is no content that was generated from the model. "
+                        "Revise your prompt and try again!",
+                    )
+                    return
+
                 data = response.candidates[0].content.parts[0].inline_data.data
 
                 logger.info("Got audio file.")

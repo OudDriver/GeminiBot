@@ -82,6 +82,7 @@ def get_initial_state(config: dict) -> dict:
         ],
         "Google Search": [Tool(google_search=GoogleSearch())],
         "Code Execution": [Tool(code_execution=ToolCodeExecution())],
+        "Nothing": [],
     }
 
     current_sys_prompt_index = 0
@@ -106,7 +107,7 @@ def get_initial_state(config: dict) -> dict:
                 "secret": [],
                 "tools_history": [],
                 "thinking": True,
-                "thinking_budget": 0, # 0 means auto thinking length
+                "thinking_budget": -1, # -1 (NOT 0) means auto thinking length
             }, f)
 
     return {

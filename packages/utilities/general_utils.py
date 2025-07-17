@@ -90,12 +90,11 @@ def replace_superscript_tags(match_obj: regex.Match) -> str:
     return "".join(converted_chars)
 
 
-def clean_text(text: str) -> tuple[str, list[str], list[str]]:
+def clean_text(text: str) -> tuple[str, list[str]]:
     """Clean a string.
 
     It will replace <sub></sub> and <sup></sup> to their respective Unicode.
-    It also removes all <thought></thought> texts and places it all to thought_matches.
-    It does the same thing with <store></store> tags, which stores secrets.
+    It removes all instances of <store></store> tags, which stores secrets.
 
     Args:
         text: The input string containing <sub></sub> and <sup></sup> tags.
@@ -107,12 +106,10 @@ def clean_text(text: str) -> tuple[str, list[str], list[str]]:
     text = regex.sub(r"<sub>(.*?)</sub>", replace_subscript_tags, text)
     text = regex.sub(r"<sup>(.*?)</sup>", replace_superscript_tags, text)
 
-    thought_matches = regex.findall(r"<thought>[\s\S]*?</thought>", text)
     secret_matches = regex.findall(r"<store>[\s\S]*?</store>", text)
-    text = regex.sub(r"<thought>[\s\S]*?</thought>", "", text)
     text = regex.sub(r"<store>[\s\S]*?</store>", "", text)
 
-    return text, thought_matches, secret_matches
+    return text, secret_matches
 
 
 def split_message_chunks(message: str, length: int) -> Iterator[str]:

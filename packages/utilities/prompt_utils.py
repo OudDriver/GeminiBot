@@ -18,9 +18,12 @@ from google.genai.types import (
     HarmBlockThreshold,
     HarmCategory,
     Part,
+    PrebuiltVoiceConfig,
     SafetySetting,
+    SpeechConfig,
     ThinkingConfig,
-    Tool, SpeechConfig, VoiceConfig, PrebuiltVoiceConfig,
+    Tool,
+    VoiceConfig,
 )
 
 from packages.maps import (
@@ -30,7 +33,6 @@ from packages.maps import (
     MAX_MESSAGE_LENGTH,
     YOUTUBE_PATTERN,
 )
-from packages.utilities.tex_utilities import check_tex, render_latex, split_tex
 from packages.utilities.errors import HandleAttachmentError
 from packages.utilities.file_utils import (
     handle_attachment,
@@ -48,6 +50,7 @@ from packages.utilities.general_utils import (
     send_long_message,
     send_long_messages,
 )
+from packages.utilities.tex_utilities import check_tex, render_latex, split_tex
 from packages.uwu import Uwuifier
 
 if TYPE_CHECKING:
@@ -96,7 +99,6 @@ def generate_config(
         auto_func_call: AutomaticFunctionCallingConfig | None,
         response_modalities: list[str],
         temperature: float | None,
-        thinking: bool | None,
 ) -> GenerateContentConfig:
     """Generate a config for Gemini.
 
@@ -107,8 +109,6 @@ def generate_config(
         auto_func_call: an automatic function calling config
         response_modalities: how you want Gemini to respond
         temperature: the temperature you want to give the LLM
-        thinking: Whether to enable thinking.
-                  Thinking budget will be taken from temp_config
 
     Returns:
         A GenerateContentConfig with system instructions, tools, safety settings,
@@ -127,7 +127,7 @@ def generate_config(
         thinking_config=ThinkingConfig(
             include_thoughts=temp_config["thinking"],
             thinking_budget=temp_config["thinking_budget"],
-        ) if thinking else None,
+        ),
     )
 
 
@@ -271,12 +271,8 @@ async def handle_output(
         file_names.append(file_name)
         await send_file(ctx, file_name)
 
-    if part.text is not None:
-        text, thought_matches, secret_matches = clean_text(part.text)
-
-        if thought_matches:
-            save_temp_config(thought=thought_matches)
-            text += "\n(This reply have a thought)"
+    if part.text is not None and not part.thought:
+        text, secret_matches = clean_text(part.text)
 
         if secret_matches:
             save_temp_config(secret=secret_matches)
@@ -299,9 +295,19 @@ async def handle_output(
         else:
             await send_long_message(ctx, mod_text, MAX_MESSAGE_LENGTH)
 
-        logger.info(f"Sent\nText:\n{text}\nThought:\n{thought_matches}\nSecrets:\n{secret_matches}")
+        logger.info(f"Sent\nText:\n{text}")
 
     return file_names
+
+
+def handle_whether_thought(parts: list[Part]) -> None:
+    """Handles all thought part from a list of parts.
+
+    Args:
+        parts: The list of part to handle
+    """
+    thoughts = [part.text for part in parts if part.text is not None and part.thought]
+    save_temp_config(thought=thoughts)
 
 
 async def validate_invocation(ctx: commands.Context, message: str) -> bool:
@@ -370,7 +376,6 @@ def prepare_api_config(
         auto_func_call,
         response_modalities,
         temperature,
-        model == "gemini-2.5-flash-preview-04-17",
     )
     return model, api_config, safety_setting, temp_config
 
@@ -574,6 +579,7 @@ async def process_response_parts(
 
     first_candidate = candidates[0]
 
+    handle_whether_thought(first_candidate.content.parts)
     for part in first_candidate.content.parts:
         file_name_list = await handle_output(
             ctx,

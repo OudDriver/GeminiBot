@@ -155,14 +155,21 @@ def prompt(tools: list[Tool], genai_client: Client) -> Callable:
 
         except (
             errors.ClientError,
-            errors.UnsupportedFunctionError,
-            errors.UnknownFunctionCallArgumentError,
         ) as e:
+            message = e
+            try:
+                message = f"{e.code} {e.status}: {e.message}."
+            except AttributeError:
+                pass
+
             await send_long_message(
                 ctx,
-                f"Something went wrong on our side. "
-                f"Please submit a bug report at the GitHub repo for this bot, "
-                f"or ping the creator.\n```{e}```",
+                "Something went wrong on our side. "
+                f"\n{message}"
+                if not isinstance(message, Exception) else
+                "Something went wrong on our side. "
+                "Please submit a bug report at the GitHub repo for this bot, "
+                f"or ping the creator.\n```{message}```",
                 MAX_MESSAGE_LENGTH,
             )
             logger.exception("An error happened at our side.")

@@ -181,21 +181,29 @@ async def _start_gemini_live_task(
 ) -> None:
     """Creates and starts the background task for Gemini Live."""
     global live_task
+    global live_task
     if not queue:
-         logger.error("Cannot start Gemini task: Audio queue is not initialized.")
-         msg = "Audio queue is not initialized."
-         raise ValueError(msg)
+        logger.error("Cannot start Gemini task: Audio queue is not initialized.")
+        msg = "Audio queue is not initialized."
+        raise ValueError(msg)
     try:
         live_task = asyncio.create_task(
             live(queue, client, model, config),
             name="GeminiLiveTask",
         )
+        def handle_live_task_exception(task):
+            if task.cancelled():
+                logger.info("Gemini Live task was cancelled.")
+                return
+            if task.exception():
+                logger.error("Gemini Live task failed with an unhandled exception:", exc_info=task.exception())
+        live_task.add_done_callback(handle_live_task_exception)
+
         logger.info(f"Gemini Live task created for model {model}.")
+
     except Exception:
         logger.exception("Failed to create Gemini Live task.")
         raise # Re-raise
-
-# --- Command Implementation ---
 
 def voice(genai_client: Client) -> Callable:
     """Factory function to create the /voice command."""
@@ -203,7 +211,6 @@ def voice(genai_client: Client) -> Callable:
     @commands.hybrid_command(name="voice")
     async def command(ctx: commands.Context) -> None:
         """Joins your voice channel and starts the Gemini Live session."""
-        # 1. Pre-checks
         if ctx.author.voice is None:
             await ctx.send("You need to be in a voice channel to use this command.")
             return
@@ -225,11 +232,9 @@ def voice(genai_client: Client) -> Callable:
             model = "gemini-2.0-flash-live-001"
             vc = await _connect_to_voice_channel(channel) # Sets global voice_client
 
-            # 4. Load Configuration
             system_instructions, voice_name = _load_system_config()
             gemini_config = _generate_config(system_instructions, voice_name)
 
-            # 5. Start Background Tasks (Gemini Live first, then Discord I/O)
             await _start_gemini_live_task(
                 audio_queue,
                 genai_client,
@@ -239,7 +244,6 @@ def voice(genai_client: Client) -> Callable:
 
             _start_discord_audio_io(vc, audio_sink)
 
-            # 7. Success Feedback
             logger.info(
                 f"Successfully joined {channel.name} "
                 f"and started Gemini Live session.",

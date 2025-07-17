@@ -45,6 +45,7 @@ HARM_BLOCK_CATEGORY: dict[str: HarmBlockThreshold] = {
     "BLOCK_MEDIUM_AND_ABOVE": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
     "BLOCK_ONLY_HIGH": HarmBlockThreshold.BLOCK_ONLY_HIGH,
     "BLOCK_NONE": HarmBlockThreshold.BLOCK_NONE,
+    "OFF": HarmBlockThreshold.OFF,
 }
 
 HARM_PRETTY_NAME: dict[str: str] = {

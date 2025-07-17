@@ -12,13 +12,11 @@ from discord.ext import voice_recv
 from samplerate import ConverterType, Resampler
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-
     from google import genai
     from google.genai.types import LiveConnectConfig
 
-unsorted_queue = asyncio.Queue(maxsize=15)
-sorted_queue = asyncio.Queue(maxsize=15)
+unsorted_queue = asyncio.Queue(maxsize=2)
+sorted_queue = asyncio.Queue(maxsize=2)
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +69,8 @@ class AudioSource(discord.PCMAudio):
 
         """
         try:
-            return self.stream.get_nowait()
+            stream = self.stream.get_nowait()
+            return stream
         except asyncio.QueueEmpty:
             return SILENCE_BYTES
         except Exception:
@@ -158,10 +157,10 @@ def mono_to_stereo(input_data: np.ndarray[Any, np.dtype[np.int16]]) -> bytes:
 
 
 def resample_to_discord(
-    data: bytes,
-    source_rate: int,
-    target_rate: int,
-    resampler: Resampler,
+        data: bytes,
+        source_rate: int,
+        target_rate: int,
+        resampler: Resampler,
 ) -> bytes:
     """Resample mono 16-bit PCM audio to stereo 16-bit PCM audio for Discord.
 
@@ -263,32 +262,33 @@ async def process_audio(
             logger.exception("Error in process_audio function.")
 
 
-async def get_audio(audio_queue: asyncio.Queue) -> AsyncGenerator[bytes, None]:
-    """Asynchronously retrieves audio data from a queue and resamples it.
-
-    Args:
-        audio_queue: The asyncio.Queue from which to retrieve audio data (bytes).
-
-    Yields:
-        bytes: Resampled audio data.
-
-    """
+# Helper function to send audio to Gemini
+async def _send_audio_to_gemini(session: Any, audio_queue: asyncio.Queue) -> None:
+    """Reads audio from queue, resamples it, and sends it to the Gemini Live API session."""
     while True:
         if audio_queue.empty():
-            await asyncio.sleep(0.001)
+            await asyncio.sleep(0.001)  # Small sleep to prevent busy-waiting
             continue
-
         data = await audio_queue.get()
         try:
             resampled_data = resample_to_gemini(data, 48000, 16000)
-            yield resampled_data
-
+            await session.send(input={"data": resampled_data, "mime_type": "audio/pcm"})
         except Exception:
-            logger.exception("An unexpected error in resample function.")
-
+            logger.exception("An unexpected error sending resampled audio to Gemini.")
         finally:
             audio_queue.task_done()
 
+# Helper function to receive audio from Gemini
+async def _receive_audio_from_gemini(session: Any, unsorted_queue: asyncio.Queue) -> None:
+    while True:
+        try:
+            turn = session.receive()
+            async for response in turn:
+                if response.data:
+                    await unsorted_queue.put(response.data)
+        except Exception:
+            logger.exception("An unexpected error receiving data from Gemini Live API.")
+            await asyncio.sleep(1) # Prevent tight loop on error
 
 async def live(
         audio_queue: asyncio.Queue,
@@ -311,24 +311,36 @@ async def live(
         model_id: The ID of the Gemini model to use for live transcription.
         config: A dictionary containing configuration settings for the Gemini Live API.
 
+    Returns:
+        asyncio.Task: The task managing the audio processing from Gemini's output.
+                      This task will run independently as long as the bot is active.
+
     """
     process_task = asyncio.create_task(process_audio(unsorted_queue, sorted_queue))
 
     try:
-        async def audio_stream() -> AsyncGenerator[bytes, None]:
-            stream = get_audio(audio_queue)
-            async for stream_data in stream:
-                yield stream_data
-
-        async with client.aio.live.connect(model=model_id, config=config) as session:
+        # Using asyncio.TaskGroup to manage concurrent send/receive tasks within the live session
+        async with client.aio.live.connect(model=model_id, config=config) as session, asyncio.TaskGroup() as tg:
             logger.info("Connected to Gemini Live API.")
-            async for data in session.start_stream(
-                    stream=audio_stream(),
-                    mime_type="audio/pcm",
-            ):
-                await unsorted_queue.put(data.data)
 
-    except Exception:
-        logger.exception("An unexpected error happened in live function.")
+            # Create tasks for sending and receiving audio
+            tg.create_task(_send_audio_to_gemini(session, audio_queue))
+            tg.create_task(_receive_audio_from_gemini(session, unsorted_queue))
+
+            await asyncio.Future()
+
+    except asyncio.CancelledError:
+        logger.warning("Gemini Live API connection task cancelled.")
+    except Exception as e:
+        logger.exception(f"An unexpected error happened in live function: {e}")
+        raise Exception from e
+
+    # Ensure the process_task is cancelled when the live function exits
+    if not process_task.done():
+        process_task.cancel()
+        try:
+            await process_task
+        except asyncio.CancelledError:
+            pass # Expected cancellation
 
     return process_task

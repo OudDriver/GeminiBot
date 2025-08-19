@@ -21,6 +21,8 @@ class SecretCog(commands.Cog, name="Secret"):
 
         secrets = temp_config.get("secret", "None") # Default to "None" if key not found
 
+        if secrets == "": secrets = "None"
+
         await ctx.send(secrets, ephemeral=True) # Always ephemeral for secrets
 
 async def setup(bot: "GeminiBot"):

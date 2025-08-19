@@ -9,6 +9,7 @@ from discord.ext import commands
 from google.genai import errors
 from google.genai.types import Content, Tool
 
+from bot.setup import DEFAULT_TOOLS_MAP
 from packages.maps import MAX_MESSAGE_LENGTH, YOUTUBE_PATTERN
 from packages.tools.memory import load_memory
 from packages.utilities.file_utils import save_temp_config, read_temp_config
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
     from main import GeminiBot
 
 logger = logging.getLogger(__name__)
-
+ctx_glob = None # screw it
 
 class PromptCog(commands.Cog, name="Prompt"):
     """A cog for handling AI prompts and chat memory."""
@@ -57,7 +58,7 @@ class PromptCog(commands.Cog, name="Prompt"):
         self.bot.latest_token_count = 0
         if ctx.author.guild_permissions.administrator:
             self._clear_memory()
-            save_temp_config(tool_use={})
+            save_temp_config(tool_call={})
             await ctx.reply(
                 "Alright, I have cleared my context. What are we gonna talk about?",
             )
@@ -68,12 +69,15 @@ class PromptCog(commands.Cog, name="Prompt"):
             ephemeral=True,
         )
 
-    # REMOVED: @commands.hybrid_command(name="prompt")
-    async def handle_ai_interaction(self, ctx: commands.Context) -> None: # Renamed from prompt_command
+    async def handle_ai_interaction(self, ctx: commands.Context) -> None:
         """Handles AI interaction based on a Discord message context (triggered by mention/reply)."""
         file_names = []
 
         try:
+            global ctx_glob
+
+            ctx_glob = ctx
+
             curr_memory = self._get_memory()
             # This line is crucial for extracting the user's message when mentioned/replied
             message = ctx.message.content.replace(f"<@{self.bot.user.id}>", "").strip()
@@ -85,13 +89,9 @@ class PromptCog(commands.Cog, name="Prompt"):
             # Get active tools based on what's set in temp_config
             temp_config = read_temp_config()
             active_tools_name = temp_config.get("active_tools_name", "Nothing")
-            # Lookup the actual tool definitions from bot's static config
-            configured_tools = self.bot.config.get("Tools", {})
-            active_tools: List[Tool] = configured_tools.get(active_tools_name, [])
+            active_tools = DEFAULT_TOOLS_MAP[active_tools_name]
 
-            # `prepare_api_config` will read model, safety, thinking from temp_config
             model, api_config, safety_setting, temp_config_for_prompt = prepare_api_config(active_tools)
-            # Use `temp_config_for_prompt` from `prepare_api_config` for consistency, as it's fresh.
 
             async with ctx.typing():
                 if message.lower() == "{clear}":

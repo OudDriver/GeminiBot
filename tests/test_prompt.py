@@ -40,7 +40,7 @@ from google.genai.types import (
 )
 from requests import Response
 
-from commands.prompt import prompt
+from packages.cogs.prompt import prompt
 from packages.maps import YOUTUBE_PATTERN
 
 if TYPE_CHECKING:

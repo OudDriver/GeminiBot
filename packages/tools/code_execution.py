@@ -30,7 +30,7 @@ def reply(message: str) -> None:
 
     """
     async def _reply(msg: str) -> None:
-        from commands.prompt import ctx_glob
+        from packages.cogs.prompt import ctx_glob
 
         await ctx_glob.reply(msg)
 
@@ -255,7 +255,7 @@ def execute_code(code_string: str) -> str:
         logger.info(f"Execution successful. Output length: {len(output)}")
         reply(final_reply)
         save_temp_config(
-            tool_use={
+            tool_call={
                 "name": "Execute Code",
                 "input": code_string,
                 "output": final_reply,
@@ -269,7 +269,7 @@ def execute_code(code_string: str) -> str:
         logger.exception(f"{error_type} occurred during code execution.")
         reply_msg = str(e) # Use the message from the raised exception
         save_temp_config(
-            tool_use={
+            tool_call={
                 "name": f"Execute Code ({error_type})",
                 "input": code_string,
                 "output": reply_msg,
@@ -283,7 +283,7 @@ def execute_code(code_string: str) -> str:
         logger.exception("An unexpected error happened in execute_code.")
         reply_msg = f"An unexpected error occurred: {e}"
         save_temp_config(
-            tool_use={
+            tool_call={
                 "name": "Execute Code (Unexpected Error)",
                 "input": code_string,
                 "output": reply_msg,

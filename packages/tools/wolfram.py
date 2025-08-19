@@ -82,7 +82,7 @@ def wolfram_alpha(query: str) -> dict[str, Any]: # Return Any to allow error dic
 
         # Save result regardless of success/failure for logging/debugging
         save_temp_config(
-            tool_use={
+            tool_call={
                 "name": "Wolfram Alpha",
                 "input": query,
                 "output": cleaned, # Save the cleaned output or error dict
@@ -95,7 +95,7 @@ def wolfram_alpha(query: str) -> dict[str, Any]: # Return Any to allow error dic
          error_result = {"success": False, "error": True, "message": str(e)}
          # Attempt to save error state
          save_temp_config(
-             tool_use={
+             tool_call={
                  "name": "Wolfram Alpha",
                  "input": query,
                  "output": error_result,
@@ -111,7 +111,7 @@ def wolfram_alpha(query: str) -> dict[str, Any]: # Return Any to allow error dic
         }
         # Attempt to save error state
         save_temp_config(
-            tool_use={
+            tool_call={
                 "name": "Wolfram Alpha",
                 "input": query,
                 "output": error_result,

@@ -85,7 +85,7 @@ def get_weather(city: str) -> dict | str:
         )
 
     save_temp_config(
-        tool_use={
+        tool_call={
             "name": "Get Weather",
             "input": city,
             "output": weather_output,

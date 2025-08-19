@@ -1,21 +1,18 @@
+from __future__ import annotations
+
 import json
 import logging
+import os
 from pathlib import Path
 
 from google import genai
-from google.genai.types import GoogleSearch, HttpOptions, Tool, ToolCodeExecution
+from google.genai.types import HttpOptions, Tool, GoogleSearch, ToolCodeExecution, UrlContext
 
-from packages.tools.internet import (
-    get_wikipedia_page,
-    make_get_request,
-    search_duckduckgo,
-)
+from packages.tools.internet import make_get_request, get_wikipedia_page, search_duckduckgo
 from packages.tools.memory import save_memory
 from packages.tools.weather import get_weather
 from packages.tools.wolfram import wolfram_alpha
-from packages.utilities.code_execution import execute_code
-# Assuming this is the new flexible save_temp_config
-from packages.utilities.file_utils import read_temp_config, save_temp_config
+from packages.tools.code_execution import execute_code
 
 logger = logging.getLogger(__name__)
 
@@ -61,57 +58,19 @@ def initialize_temp_config(bot_config: dict) -> None:
     temp_config_path = Path("temp/temp_config.json")
     Path("temp").mkdir(parents=True, exist_ok=True) # Ensure temp directory exists
 
-    # Define the default mapping of toolset names to actual tool functions/definitions
-    # This should probably be part of your static config.json or a separate file,
-    # but for now, I'll keep it here as it was in get_initial_state.
-    # Ideally, this should be defined once, maybe in a `tools_map.py` and referenced.
-    # For refactoring, I'm sticking to the given structure.
-    DEFAULT_TOOLS_MAP = {
-        "Default": [
-            get_weather,
-            make_get_request,
-            get_wikipedia_page,
-            wolfram_alpha,
-            execute_code,
-            search_duckduckgo,
-            save_memory, # Assumes save_memory is a tool function
-        ],
-        "Google Search": [Tool(google_search=GoogleSearch())],
-        "Code Execution": [Tool(code_execution=ToolCodeExecution())],
-        "Nothing": [],
-    }
-
-    # Static data from config.json to derive initial temp config values
     system_prompts_from_config = bot_config.get("SystemPrompts", [])
     model_names_from_config = bot_config.get("ModelNames", {})
     tool_set_names_from_config = list(bot_config.get("Tools", DEFAULT_TOOLS_MAP).keys()) # Using DEFAULT_TOOLS_MAP as a fallback for keys
 
-    # Determine initial values
     initial_sys_prompt_index = 0
-    initial_system_prompt_data = (
-        system_prompts_from_config[initial_sys_prompt_index]["SystemPrompt"]
-        if system_prompts_from_config
-        else "You are a helpful AI assistant."
-    )
+    initial_system_prompt_data = system_prompts_from_config[initial_sys_prompt_index]["SystemPrompt"]
+    initial_system_prompt_name = system_prompts_from_config[initial_sys_prompt_index]["Name"]
+    
+    initial_model_id = list(model_names_from_config.keys())[0]
+    initial_model_index = 0
 
-    initial_model_id = (
-        list(model_names_from_config.keys())[0]
-        if model_names_from_config
-        else "gemini-1.5-flash-latest" # Fallback if no models defined
-    )
-    initial_model_index = 0 # Corresponds to the first model in keys()
-
-    initial_active_tools_name = (
-        tool_set_names_from_config[0]
-        if tool_set_names_from_config
-        else "Nothing" # Fallback
-    )
+    initial_active_tools_name = tool_set_names_from_config[0]
     initial_active_tools_index = 0 # Corresponds to the first toolset name
-
-    # Active tool definitions are resolved dynamically from `Tools` in `config.json`
-    # which points to DEFAULT_TOOLS_MAP in `prepare_api_config`.
-    # So `tool_use` in temp_config should store the *name* of the active toolset, not the object.
-    # The `prepare_api_config` function will then use this name to look up the actual tool objects.
 
     # Read current temp config to merge new defaults
     current_temp_config = {}
@@ -128,6 +87,7 @@ def initialize_temp_config(bot_config: dict) -> None:
         "model": initial_model_id,
         "current_model_index": initial_model_index,
         "system_prompt_data": initial_system_prompt_data,
+        "system_prompt_name": initial_system_prompt_name,
         "current_sys_prompt_index": initial_sys_prompt_index,
         "current_uwu_status": False,
         "thought": [],
@@ -137,14 +97,28 @@ def initialize_temp_config(bot_config: dict) -> None:
         "thinking": True,
         "thinking_budget": -1,
         "voice_name": "Leda",
+        "tool_call": [],
     }
 
-    updated_temp_config = {**default_temp_config, **current_temp_config}
+    if os.path.exists(temp_config_path):
+        os.remove(temp_config_path)
 
-    # Save only if there were changes to avoid unnecessary file writes
-    if updated_temp_config != current_temp_config:
-        with open(temp_config_path, "w", encoding="utf-8") as f:
-            json.dump(updated_temp_config, f, indent=4)
-        logger.info("Initialized/Updated temp_config.json with default values.")
-    else:
-        logger.debug("temp_config.json is up to date.")
+    with open(temp_config_path, "w", encoding="utf-8") as f:
+        json.dump(default_temp_config, f, indent=4)
+        logger.info("Overwritten temp_config.json.")
+
+
+DEFAULT_TOOLS_MAP = {
+    "Default": [
+        get_weather,
+        make_get_request,
+        get_wikipedia_page,
+        wolfram_alpha,
+        execute_code,
+        search_duckduckgo,
+        save_memory,
+    ],
+    "Google Search & Code Execution": [Tool(google_search=GoogleSearch()), Tool(code_execution=ToolCodeExecution())],
+    "Google Search & URL Context": [Tool(google_search=GoogleSearch()), Tool(url_context=UrlContext())],
+    "Nothing": [],
+}

@@ -20,7 +20,7 @@ def save_memory(msg: str) -> None:
         f.write("\n" + msg)
 
     save_temp_config(
-        tool_use={
+        tool_call={
             "name": "Search DuckDuckGo",
             "input": msg,
             "output": "",

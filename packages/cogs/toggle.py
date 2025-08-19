@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.setup import DEFAULT_TOOLS_MAP
 from packages.utilities.file_utils import read_temp_config, save_temp_config
 
 if TYPE_CHECKING:
@@ -55,7 +56,9 @@ class ToggleCog(commands.Cog, name="Toggle"):
 
         # Update temp config with new state (using kwargs for save_temp_config)
         save_temp_config(
-            system_prompt_data=system_prompt_data
+            system_prompt_data=system_prompt_data,
+            system_prompt_name=system_prompt_name,
+            current_sys_prompt_index=new_index,
         )
         logger.info(f"Switched to system prompt: {system_prompt_name}")
         await ctx.send(f"Using system prompt: {system_prompt_name}.")
@@ -63,10 +66,8 @@ class ToggleCog(commands.Cog, name="Toggle"):
 
     async def _handle_toggle_model(self, ctx: commands.Context, index: int | None) -> None:
         """Handles toggling the model."""
-        # Get static list of models from bot's main config
         models = self.bot.config.get("ModelNames", {})
-        model_options = list(models.keys()) # IDs like 'gemini-1.5-flash-latest'
-        # Get current state from temp config
+        model_options = list(models.keys())
         temp_config = read_temp_config()
 
         if not model_options:
@@ -99,7 +100,8 @@ class ToggleCog(commands.Cog, name="Toggle"):
 
         # Update temp config with new state
         save_temp_config(
-            model=selected_model_option
+            model=selected_model_option,
+            current_model_index=new_index,
         )
 
         friendly_name = models.get(selected_model_option, selected_model_option)
@@ -119,16 +121,9 @@ class ToggleCog(commands.Cog, name="Toggle"):
     async def _handle_toggle_tools(self, ctx: commands.Context, index: int | None) -> None:
         """Handles toggling the active toolset."""
         # Get static tool definitions from bot's main config
-        tools_config = self.bot.config.get("Tools", {})
-        tools_names = list(tools_config.keys()) # Get names like "Default", "Google Search"
-        # Get current state from temp config
         temp_config = read_temp_config()
 
-        if not tools_names:
-            await ctx.reply("No toolsets available to switch to.", ephemeral=True)
-            return
-
-        max_index = len(tools_names)
+        max_index = len(DEFAULT_TOOLS_MAP)
         if index is not None and not (1 <= index <= max_index):
             await ctx.reply(
                 (
@@ -141,8 +136,9 @@ class ToggleCog(commands.Cog, name="Toggle"):
 
         current_active_tools_name = temp_config.get("active_tools_name", None)
         try:
-            current_index = tools_names.index(current_active_tools_name) if current_active_tools_name else 0
-        except ValueError: # Current toolset name not found
+            keys_list = list(DEFAULT_TOOLS_MAP.keys())
+            current_index = keys_list.index(current_active_tools_name) if current_active_tools_name else 0
+        except ValueError:  # Current toolset name not found
             current_index = 0
 
         if index is None:
@@ -150,14 +146,9 @@ class ToggleCog(commands.Cog, name="Toggle"):
         else:
             new_index = index - 1
 
-        tool_name = tools_names[new_index]
-        # `tool_use` is typically generated dynamically when `prepare_api_config` is called,
-        # which maps names to actual tool objects (Python functions or GenAI Tool objects).
-        # We only need to store the `tool_name` in temp_config for `prepare_api_config` to use.
-        # So we remove `initial_state["active_tools"] = tools.get(tool_name, [])`
-        # and simply save `active_tools_name`.
+        keys_list = list(DEFAULT_TOOLS_MAP.keys())
+        tool_name = keys_list[new_index]
 
-        # Update temp config with new state
         save_temp_config(
             active_tools_index=new_index,
             active_tools_name=tool_name,
@@ -167,7 +158,8 @@ class ToggleCog(commands.Cog, name="Toggle"):
         await ctx.send(f"Switched to toolset: {tool_name}.")
 
 
-    async def _handle_toggle_thinking(self, ctx: commands.Context) -> None:
+    @staticmethod
+    async def _handle_toggle_thinking(ctx: commands.Context) -> None:
         """Handles toggling whether the model will think or not."""
         temp_config = read_temp_config()
         thinking = temp_config.get("thinking", False)
@@ -182,7 +174,8 @@ class ToggleCog(commands.Cog, name="Toggle"):
             save_temp_config(thinking=False)
 
 
-    async def _handle_thinking_budget(self, ctx: commands.Context, thinking_budget: int | None) -> None:
+    @staticmethod
+    async def _handle_thinking_budget(ctx: commands.Context, thinking_budget: int | None) -> None:
         """Handles changing the thinking budget."""
         temp_config = read_temp_config() # Read to show current state
 
@@ -199,7 +192,8 @@ class ToggleCog(commands.Cog, name="Toggle"):
             save_temp_config(thinking_budget=thinking_budget)
 
 
-    async def _handle_toggle_uwu(self, ctx: commands.Context) -> None:
+    @staticmethod
+    async def _handle_toggle_uwu(ctx: commands.Context) -> None:
         """Handles toggling the UwUifier."""
         temp_config = read_temp_config()
         current_uwu_status = temp_config.get("current_uwu_status", False)

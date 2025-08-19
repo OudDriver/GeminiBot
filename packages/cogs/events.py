@@ -6,12 +6,13 @@ from typing import TYPE_CHECKING
 import discord
 from discord.ext import commands
 
+from packages.cogs.prompt import PromptCog
 # Import the read_temp_config utility
 from packages.utilities.file_utils import read_temp_config
 
 if TYPE_CHECKING:
     from discord.message import Message
-    from main import GeminiBot # Assuming GeminiBot is in your project root or accessible via module path
+    from main import GeminiBot
 
 
 logger = logging.getLogger(__name__)
@@ -56,20 +57,19 @@ class EventsCog(commands.Cog, name="Events"):
                     # Call the renamed method
                     await prompt_cog.handle_ai_interaction(ctx)
                 except Exception as e:
-                    logger.exception("Error in on_message event (manual prompt invocation):")
+                    logger.exception(
+                        "Error in on_message event (manual prompt invocation):"
+                    )
                     await ctx.send(
                         f"An error occurred while processing your request: `{e}`",
-                        ephemeral=True
+                        ephemeral=True,
                     )
             else:
                 logger.warning("PromptCog not found. Cannot respond to mention/reply.")
                 await ctx.send(
                     "Error: My AI processing module is not loaded. Please contact an administrator.",
-                    ephemeral=True
+                    ephemeral=True,
                 )
-
-        # It's important to keep this for other commands (if you have any besides /prompt)
-        await self.bot.process_commands(message)
 
 async def setup(bot: "GeminiBot"):
     """Adds the EventsCog to the bot."""

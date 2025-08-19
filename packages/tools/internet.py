@@ -40,7 +40,7 @@ def search_duckduckgo(
                     result["body"] = get_webpage_content_ddg(result["href"])
                 results.append(result)
             save_temp_config(
-                tool_use={
+                tool_call={
                     "name": "Search DuckDuckGo",
                     "input": {
                         "query": query,
@@ -118,7 +118,7 @@ def make_get_request(url: str, *kwargs: dict[str: str]) -> str:
             response = client.get(url, params=params, follow_redirects=True)
             response.raise_for_status()
             save_temp_config(
-                tool_use={
+                tool_call={
                     "name": "Make Get Request",
                     "input": url,
                     "output": response.text,
@@ -128,7 +128,7 @@ def make_get_request(url: str, *kwargs: dict[str: str]) -> str:
     except httpx.HTTPError as e:
         logger.exception("An HTTP error occurred.")
         save_temp_config(
-            tool_use={
+            tool_call={
                 "name": "Make Get Request (Error)",
                 "input": url,
                 "output": str(e),
@@ -152,7 +152,7 @@ def get_wikipedia_page(query: str) -> str:
         page = wikipedia.page(query)
         logger.info(f"Retrieval about {page.title} successful.")
         save_temp_config(
-            tool_use={
+            tool_call={
                 "name": "Get Wikipedia",
                 "input": query,
                 "output": page.content,
@@ -163,7 +163,7 @@ def get_wikipedia_page(query: str) -> str:
         logger.exception(f"No Wikipedia page found for '{query}'.")
         error_msg = "Sorry, I couldn't find a Wikipedia page for '{query}'."
         save_temp_config(
-            tool_use={
+            tool_call={
                 "name": "Get Wikipedia (Error)",
                 "input": query,
                 "output": error_msg,
@@ -177,7 +177,7 @@ def get_wikipedia_page(query: str) -> str:
             f"Did you mean any of these?\n{e.options}"
         )
         save_temp_config(
-            tool_use={
+            tool_call={
                 "name": "Get Wikipedia (Error)",
                 "input": query,
                 "output": error_msg,
@@ -191,7 +191,7 @@ def get_wikipedia_page(query: str) -> str:
             "while fetching information from Wikipedia."
         )
         save_temp_config(
-            tool_use={
+            tool_call={
                 "name": "Get Wikipedia (Error)",
                 "input": query,
                 "output": error_msg,

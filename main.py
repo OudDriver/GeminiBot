@@ -9,8 +9,8 @@ from google.genai import Client
 from bot.config import ConfigManager
 # Use the refactored initialization function
 from bot.setup import initialize_temp_config, setup_gemini, setup_logging
-from packages.utilities.code_execution import start_docker_daemon
-from packages.utilities.file_utils import validate_config_files, read_temp_config
+from packages.tools.code_execution import start_docker_daemon
+from packages.utilities.file_utils import validate_config_files
 
 
 class GeminiBot(commands.Bot):
@@ -33,19 +33,25 @@ class GeminiBot(commands.Bot):
         self.loop.create_task(self.config.start_hot_reload_loop())
         self.logger.info("Configuration hot-reload task has been started.")
 
-        # Automatically discover and load cogs from the 'commands' directory
-        cogs_dir = "commands"
-        self.logger.info("Loading extensions from './%s'...", cogs_dir)
-        for filename in os.listdir(f"./{cogs_dir}"):
+        # Automatically discover and load cogs from the 'packages/cogs' directory
+        # This is the path for os.listdir to find the files
+        cogs_filesystem_dir = "./packages/cogs"
+        # This is the Python module path for load_extension
+        cogs_module_path = "packages.cogs"
+
+        self.logger.info("Loading extensions from '%s'...", cogs_filesystem_dir)
+        # Use the filesystem path for listing directory contents
+        for filename in os.listdir(cogs_filesystem_dir):
             if filename.endswith(".py") and not filename.startswith("_"):
-                extension_name = f"{cogs_dir}.{filename[:-3]}"
+                # Construct the full Python module path
+                extension_name = f"{cogs_module_path}.{filename[:-3]}"
                 try:
                     await self.load_extension(extension_name)
-                    self.logger.info("Successfully loaded extension: %s", filename)
+                    self.logger.info("Successfully loaded extension: %s (module: %s)", filename, extension_name)
                 except commands.errors.NoEntryPointError:
                     self.logger.debug("Skipping %s as it is not a loadable cog.", filename)
                 except Exception as e:
-                    self.logger.error("Failed to load extension %s.", filename, exc_info=e)
+                    self.logger.error("Failed to load extension %s (module: %s).", filename, extension_name, exc_info=e)
 
 
 def main() -> None:
@@ -67,18 +73,14 @@ def main() -> None:
 
     initialize_temp_config(config.get_all_config()) # Pass the full config dict for defaults
 
-    # Note: If GeminiAPIkey changes, a restart is needed to re-initialize the client.
     genai_client = setup_gemini(config.get("GeminiAPIkey"))
 
     intents = discord.Intents.default()
     intents.message_content = True
     intents.members = True
-    intents.voice_states = True # Required for voice commands
+    intents.voice_states = True
 
-    # Pass only config and genai_client to GeminiBot
     client = GeminiBot(config=config, genai_client=genai_client, command_prefix="!", intents=intents)
-
-    # Note: If DiscordToken changes, the bot must be restarted.
     client.run(config.get("DiscordToken"), log_handler=None)
 
 if __name__ == "__main__":

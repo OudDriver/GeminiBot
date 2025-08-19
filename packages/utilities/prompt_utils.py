@@ -162,7 +162,7 @@ def modify_text(
         The modified text.
 
     """
-    if temp_config["uwu"]:
+    if temp_config["current_uwu_status"]:
         uwu = Uwuifier()
         text = uwu.uwuify_sentence(text)
 
@@ -367,7 +367,7 @@ def prepare_api_config(
         response_modalities = None
         tool_func_call = tools
         auto_func_call = AutomaticFunctionCallingConfig(maximum_remote_calls=5)
-        system_instructions = temp_config["system_prompt"]
+        system_instructions = temp_config["system_prompt_data"]
 
     api_config = generate_config(
         system_instructions,

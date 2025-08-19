@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import regex
-from google.genai.types import HarmBlockThreshold, HarmProbability
+from google.genai.types import (
+    HarmBlockThreshold,
+    HarmProbability,
+)
 
 superscript_map: dict[str: str] = {
     "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶",
@@ -91,3 +94,4 @@ TTS_VOICES = [
     {"name": "Sadaltager", "personality": "Knowledgeable"},
     {"name": "Sulafat", "personality": "Warm"},
 ]
+

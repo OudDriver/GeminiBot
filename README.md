@@ -60,7 +60,7 @@ Go to [the Wolfram|Alpha Api](https://products.wolframalpha.com/api/) and click 
 Go to [the Gemini API docs on the "all models section"](https://ai.google.dev/gemini-api/docs/models) and just input any of the model variants show (Except imagen, veo, text embedding, and the live variant). Make sure to include the clean name usually shown in blue.
 
 ## Discord Token
-Really... It's **easy**. Go to (the Discord developer portal)[https://discord.com/developers/applications], click on **New Application**, and click **Create**.
+Really... It's **easy**. Go to [the Discord developer portal](https://discord.com/developers/applications), click on **New Application**, and click **Create**.
 Go to the **Bot** section, enable all intents, click **Reset Token** and paste the Discord token into the config file. 
 Then, scroll down, click on the **Administrator** permission, click **Copy**, paste it on a new tab, and invite the bot to your server.
 

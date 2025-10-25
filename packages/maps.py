@@ -6,7 +6,7 @@ from google.genai.types import (
     HarmProbability,
 )
 
-superscript_map: dict[str: str] = {
+SUPERSCRIPT_MAP: dict[str, str] = {
     "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶",
     "7": "⁷", "8": "⁸", "9": "⁹", "a": "ᵃ", "b": "ᵇ", "c": "ᶜ", "d": "ᵈ",
     "e": "ᵉ", "f": "ᶠ", "g": "ᵍ", "h": "ʰ", "i": "ᶦ", "j": "ʲ", "k": "ᵏ",
@@ -19,7 +19,7 @@ superscript_map: dict[str: str] = {
     "-": "⁻", "=": "⁼", "(": "⁽", ")": "⁾",
 }
 
-subscript_map: dict[str: str] = {
+SUBSCRIPT_MAP: dict[str, str] = {
     "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆",
     "7": "₇", "8": "₈", "9": "₉", "a": "ₐ", "b": "♭", "c": "꜀", "d": "ᑯ",
     "e": "ₑ", "f": "բ", "g": "₉", "h": "ₕ", "i": "ᵢ", "j": "ⱼ", "k": "ₖ",
@@ -32,7 +32,7 @@ subscript_map: dict[str: str] = {
     "-": "₋", "=": "₌", "(": "₍", ")": "₎",
 }
 
-BLOCKED_CATEGORY: dict[str: HarmProbability] = {
+BLOCKED_CATEGORY: dict[str, list[HarmProbability]] = {
     "BLOCK_LOW_AND_ABOVE": [
         HarmProbability.LOW,
         HarmProbability.MEDIUM,
@@ -43,7 +43,7 @@ BLOCKED_CATEGORY: dict[str: HarmProbability] = {
     "BLOCK_NONE": [],
 }
 
-HARM_BLOCK_CATEGORY: dict[str: HarmBlockThreshold] = {
+HARM_BLOCK_CATEGORY: dict[str, HarmBlockThreshold] = {
     "BLOCK_LOW_AND_ABOVE": HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
     "BLOCK_MEDIUM_AND_ABOVE": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
     "BLOCK_ONLY_HIGH": HarmBlockThreshold.BLOCK_ONLY_HIGH,
@@ -51,7 +51,7 @@ HARM_BLOCK_CATEGORY: dict[str: HarmBlockThreshold] = {
     "OFF": HarmBlockThreshold.OFF,
 }
 
-HARM_PRETTY_NAME: dict[str: str] = {
+HARM_PRETTY_NAME: dict[str, str] = {
     "HARM_CATEGORY_SEXUALLY_EXPLICIT": "Sexually Explicit",
     "HARM_CATEGORY_HATE_SPEECH": "Hate Speech",
     "HARM_CATEGORY_HARASSMENT": "Harassment",
@@ -95,3 +95,4 @@ TTS_VOICES = [
     {"name": "Sulafat", "personality": "Warm"},
 ]
 
+IMAGE_GENERATION_MODELS = ["gemini-2.5-flash-image-preview"]

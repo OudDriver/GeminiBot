@@ -1,4 +1,4 @@
-from __future__ import annotations # For postponed evaluation of type annotations
+from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING
 import discord
 from discord.ext import commands
 
-from packages.cogs.prompt import PromptCog
 # Import the read_temp_config utility
 from packages.utilities.file_utils import read_temp_config
 
 if TYPE_CHECKING:
     from discord.message import Message
+
     from main import GeminiBot
 
 
@@ -55,10 +55,10 @@ class EventsCog(commands.Cog, name="Events"):
             if prompt_cog:
                 try:
                     # Call the renamed method
-                    await prompt_cog.handle_ai_interaction(ctx)
+                    await prompt_cog.handle_interaction(ctx)
                 except Exception as e:
                     logger.exception(
-                        "Error in on_message event (manual prompt invocation):"
+                        "Error in on_message event (manual prompt invocation):",
                     )
                     await ctx.send(
                         f"An error occurred while processing your request: `{e}`",
@@ -67,7 +67,8 @@ class EventsCog(commands.Cog, name="Events"):
             else:
                 logger.warning("PromptCog not found. Cannot respond to mention/reply.")
                 await ctx.send(
-                    "Error: My AI processing module is not loaded. Please contact an administrator.",
+                    "Error: My AI processing module is not loaded. "
+                    "Please contact an administrator.",
                     ephemeral=True,
                 )
 

@@ -8,7 +8,7 @@ import discord
 import nest_asyncio
 import regex
 
-from packages.maps import subscript_map, superscript_map
+from packages.maps import SUBSCRIPT_MAP, SUPERSCRIPT_MAP
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -29,65 +29,49 @@ def generate_unique_file_name(extension: str) -> str:
         A random file name.
 
     """
+    if not extension:
+        msg = "No extension provided!"
+        raise ValueError(msg)
+
+    extension = extension.removeprefix(".")
+
     timestamp = int(time.time())
     random_str = uuid.uuid4()
     return f"{timestamp}_{random_str}.{extension}"
 
 
-def replace_subscript_tags(match_obj: regex.Match) -> str:
-    """Replace <sub></sub> text to an actual subscript.
-
-    Callback function for regex.sub to convert characters in a captured group
-    (match_obj.group(1)) to their subscript equivalents using `subscript_map`.
-
-    Characters not found in the subscript_map are left unchanged.
+def convert_subscripts(text: str) -> str:
+    """Finds all <sub></sub> tags and converts their content to subscript characters.
 
     Args:
-        match_obj: A regular expression match object. This function
-                   specifically processes the content of the first
-                   capturing group (match_obj.group(1)).
+        text: The input string containing <sub> tags.
 
     Returns:
-        The string from match_obj.group(1) with applicable characters
-        replaced by their subscript versions.
-
+        A new string with subscript tags replaced by Unicode characters.
     """
-    # Get the string captured by the first group in the regex match
-    content_to_convert = match_obj.group(1)
+    def replacer(match: regex.Match) -> str:
+        """A nested function to handle the replacement logic."""
+        content = match.group(1)
+        return "".join(SUBSCRIPT_MAP.get(char, char) for char in content)
 
-    converted_chars = (
-        subscript_map.get(char, char) for char in content_to_convert
-    )
-
-    # Join the list of converted (or original) characters back into a single string
-    return "".join(converted_chars)
+    return regex.compile(r"<sub>(.*?)</sub>").sub(replacer, text)
 
 
-def replace_superscript_tags(match_obj: regex.Match) -> str:
-    """Replace <sup></sup> text to an actual script.
-
-    Callback function for regex.sub to convert characters in a captured group
-    (match_obj.group(1)) to their subscript equivalents using `superscript_map`.
-
-    Characters not found in the superscript_map are left unchanged.
+def convert_superscripts(text: str) -> str:
+    """Finds all <sup></sup> tags and converts their content to superscript characters.
 
     Args:
-        match_obj: A regular expression match object. This function
-                   specifically processes the content of the first
-                   capturing group (match_obj.group(1)).
+        text: The input string containing <sub> tags.
 
     Returns:
-        The string from match_obj.group(1) with applicable characters
-        replaced by their subscript versions.
-
+        A new string with subscript tags replaced by Unicode characters.
     """
-    # Get the string captured by the first group in the regex match
-    content_to_convert = match_obj.group(1)
+    def replacer(match: regex.Match) -> str:
+        """A nested function to handle the replacement logic."""
+        content = match.group(1)
+        return "".join(SUPERSCRIPT_MAP.get(char, char) for char in content)
 
-    converted_chars = (superscript_map.get(char, char) for char in content_to_convert)
-
-    # Join the list of converted (or original) characters back into a single string
-    return "".join(converted_chars)
+    return regex.compile(r"<sup>(.*?)</sup>").sub(replacer, text)
 
 
 def clean_text(text: str) -> tuple[str, list[str]]:
@@ -103,8 +87,8 @@ def clean_text(text: str) -> tuple[str, list[str]]:
         The string with the tags replaced by subscript and superscript characters.
 
     """
-    text = regex.sub(r"<sub>(.*?)</sub>", replace_subscript_tags, text)
-    text = regex.sub(r"<sup>(.*?)</sup>", replace_superscript_tags, text)
+    text = convert_subscripts(text)
+    text = convert_superscripts(text)
 
     secret_matches = regex.findall(r"<store>[\s\S]*?</store>", text)
     text = regex.sub(r"<store>[\s\S]*?</store>", "", text)
@@ -123,8 +107,12 @@ def split_message_chunks(message: str, length: int) -> Iterator[str]:
         str: The next chunk of the message.
 
     """
+    if length <= 0:
+        msg = "Length limit must be positive."
+        raise ValueError(msg)
+
     if not message:
-        return # Return an empty iterator if the message is empty
+        return
 
     start = 0
     while start < len(message):
@@ -134,25 +122,20 @@ def split_message_chunks(message: str, length: int) -> Iterator[str]:
         # If this chunk potentially goes beyond the message end, we take it all
         if potential_end == len(message):
             end = potential_end
-            next_start = end # Loop will terminate
+            next_start = end
         else:
             # Otherwise, try to find the last space within the limit
-            # [start, potential_end)
-            # We search *before* potential_end
-            # to allow splitting exactly at 'length' if needed.
             last_space = message.rfind(" ", start, potential_end)
 
-            # If a space is found *after* the current start position, split there
             if last_space > start:
                 end = last_space
-                next_start = end + 1 # Start after the space for the next chunk
+                next_start = end + 1
             else:
-                # No suitable space found, or space is at the very beginning.
-                # Cut at the maximum length (potential_end).
                 end = potential_end
                 next_start = end
 
-        chunk = message[start:end]
+        chunk = message[start:end].strip()
+
         if chunk:
             yield chunk
 
@@ -169,17 +152,11 @@ async def send_long_message(ctx: Context, message: str, length: int) -> None:
 
     """
     if check_message_empty(message):
-        return
-
-    if length <= 0:
-        msg = "Length limit must be positive."
+        msg = "Message is empty!"
         raise ValueError(msg)
 
     # Use the generator to get chunks and send them
     for chunk in split_message_chunks(message, length):
-        # The generator ensures chunks aren't empty
-        # unless the original message was empty
-        # (and the generator handles empty message case by returning immediately)
         await ctx.reply(chunk)
 
 
@@ -196,7 +173,7 @@ async def send_file(ctx: Context, file_name: str) -> None:
 
 async def send_long_messages(
         ctx: Context,
-        messages: list[str | discord.File],
+        messages: str | list[str | discord.File],
         length: int,
 ) -> None:
     """Send a long list of message in chunks.
@@ -210,6 +187,10 @@ async def send_long_messages(
         length: The length limit of each message chunk.
 
     """
+    if isinstance(messages, str):
+        await send_long_message(ctx, messages, length)
+        return
+
     for message in messages:
         if isinstance(message, str):
             if check_message_empty(message):

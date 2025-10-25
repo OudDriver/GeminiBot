@@ -17,39 +17,16 @@ def wolfram_alpha(query: str) -> dict[str, Any]: # Return Any to allow error dic
         A dictionary representing the query result, or an error dictionary.
     """
     app_id = None
-    try:
-        # Consider loading config outside the function if called frequently
-        with open("config.json") as f:
-            loaded_file = json.load(f)
-            app_id = loaded_file.get("WolframAPI")
-            if not app_id:
-                 logger.error("WolframAPI key not found or is empty in config.json")
-                 return {
-                     "success": False,
-                     "error": True,
-                     "message": "WolframAlpha App ID not configured.",
-                 }
-    except FileNotFoundError:
-        logger.exception("Configuration file 'config.json' not found.")
-        return {
-            "success": False,
-            "error": True,
-            "message": "Configuration file not found.",
-        }
-    except json.JSONDecodeError as e:
-        logger.exception("Error decoding 'config.json'.")
-        return {
-            "success": False,
-            "error": True,
-            "message": f"Invalid configuration file format: {e}",
-        }
-    except Exception as e:
-         logger.exception("An unexpected error occurred loading configuration.")
-         return {
-             "success": False,
-             "error": True,
-             "message": f"Error loading configuration: {e}",
-         }
+    with open("config.json") as f:
+        loaded_file = json.load(f)
+        app_id = loaded_file.get("WolframAPI")
+        if not app_id:
+             logger.error("WolframAPI key not found or is empty in config.json")
+             return {
+                 "success": False,
+                 "error": True,
+                 "message": "WolframAlpha App ID not configured.",
+             }
 
     client = WolframAlphaFullAPI(app_id)
 

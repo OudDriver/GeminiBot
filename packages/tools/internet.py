@@ -1,12 +1,11 @@
 import logging
 from typing import Any
 
-import duckduckgo_search.exceptions
 import httpx
 import requests
-import wikipedia
+import wikipediaapi
 from bs4 import BeautifulSoup
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 from packages.utilities.file_utils import save_temp_config
 
@@ -52,10 +51,10 @@ def search_duckduckgo(
             )
             logger.info("Search Duckduckgo successful!")
             return results
-        except duckduckgo_search.exceptions.RatelimitException:
+        except ddgs.exceptions.RatelimitException:
             logger.exception("Rate limit reached.")
             return "Rate limit reached. Please try again later."
-        except duckduckgo_search.exceptions.DuckDuckGoSearchException as e:
+        except ddgs.exceptions.DuckDuckGoSearchException as e:
             logger.exception("A search exception happened!")
             return f"A search exception happened! {e}"
         except Exception as e:
@@ -149,41 +148,36 @@ def get_wikipedia_page(query: str) -> str:
 
     """
     try:
-        page = wikipedia.page(query)
+        wiki_wiki = wikipediaapi.Wikipedia(
+            user_agent="GeminiBot (d.japaryo@gmail.com) Tool Call",
+        )
+        page = wiki_wiki.page(query)
+
+        if not page.exists():
+            logger.exception(f"No Wikipedia page found for '{query}'.")
+            error_msg = "Sorry, I couldn't find a Wikipedia page for '{query}'."
+            save_temp_config(
+                tool_call={
+                    "name": "Get Wikipedia (Error)",
+                    "input": query,
+                    "output": error_msg,
+                },
+            )
+            return f"The page for '{query}' doesn't exist."
+
+        content = page.text
+
         logger.info(f"Retrieval about {page.title} successful.")
+
         save_temp_config(
             tool_call={
                 "name": "Get Wikipedia",
                 "input": query,
-                "output": page.content,
+                "output": content,
             },
         )
-        return page.content
-    except wikipedia.exceptions.PageError:
-        logger.exception(f"No Wikipedia page found for '{query}'.")
-        error_msg = "Sorry, I couldn't find a Wikipedia page for '{query}'."
-        save_temp_config(
-            tool_call={
-                "name": "Get Wikipedia (Error)",
-                "input": query,
-                "output": error_msg,
-            },
-        )
-        return f"Sorry, I couldn't find a Wikipedia page for '{query}'."
-    except wikipedia.exceptions.DisambiguationError as e:
-        logger.exception("Disambiguation error occurred")
-        error_msg = (
-            f"Your query is ambiguous. Please be more specific. "
-            f"Did you mean any of these?\n{e.options}"
-        )
-        save_temp_config(
-            tool_call={
-                "name": "Get Wikipedia (Error)",
-                "input": query,
-                "output": error_msg,
-            },
-        )
-        return error_msg
+        return content
+
     except Exception:
         logger.exception("An error occurred while fetching Wikipedia data.")
         error_msg = (

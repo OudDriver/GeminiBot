@@ -141,10 +141,7 @@ class ToggleCog(commands.Cog, name="Toggle"):
         except ValueError:  # Current toolset name not found
             current_index = 0
 
-        if index is None:
-            new_index = (current_index + 1) % max_index
-        else:
-            new_index = index - 1
+        new_index = (current_index + 1) % max_index if index is None else index - 1
 
         keys_list = list(DEFAULT_TOOLS_MAP.keys())
         tool_name = keys_list[new_index]

@@ -6,18 +6,20 @@ import platform
 import shutil
 import sys
 
-from install_utils.install_utils import get_distro_info, run_command, setup_logging
 
+from install_utils.install_utils import get_distro_info, run_command, setup_logging
 system = platform.system()
 
 def install_latex_debian() -> bool | None:
     """Installs LaTeX on Debian-based distribution."""
     logger.info("Detected Debian-based distribution (apt).")
     if run_command(["apt-get", "update", "-y"]):
-        logger.info("Attempting to install texlive-bin...")
-        if run_command(["apt-get", "install", "-y", "texlive-bin", "texlive-type1cm"]):
+        logger.info("Attempting to install texlive-bin, dvipng, and extras...")
+        if run_command(
+            ["apt-get", "install", "-y", "texlive-bin", "texlive-type1cm", "dvipng"]
+        ):
             return True
-        logger.error("Failed to install texlive-bin.")
+        logger.error("Failed to install texlive packages.")
         return None
     logger.error("Failed to update package lists (apt-get update).")
     return None
@@ -36,10 +38,19 @@ def install_latex_rhel() -> bool | None:
 
     if pkg_manager:
         logger.info(f"Using {pkg_manager} package manager.")
-        logger.info("Attempting to install texlive...")
-        if run_command([pkg_manager, "install", "-y", "texlive", "texlive-type1cm"]):
+        logger.info("Attempting to install texlive, texlive-dvipng, and extras...")
+        if run_command(
+            [
+                pkg_manager,
+                "install",
+                "-y",
+                "texlive",
+                "texlive-type1cm",
+                "texlive-dvipng",
+            ]
+        ):
             return True
-        logger.error("Failed to install texlive.")
+        logger.error("Failed to install texlive packages.")
         return None
     logger.error("Error: Neither dnf nor yum package managers found.")
     return None
@@ -48,7 +59,7 @@ def install_latex_rhel() -> bool | None:
 def install_latex_arch() -> bool | None:
     """Installs LaTeX on Arch-based distribution."""
     logger.info("Detected Arch-based distribution (pacman).")
-    logger.info("Attempting to sync repositories and install texlive-bin...")
+    logger.info("Attempting to sync repositories and install texlive packages...")
     if run_command(
         [
             "pacman",
@@ -56,22 +67,33 @@ def install_latex_arch() -> bool | None:
             "--noconfirm",
             "--needed",
             "texlive-bin",
+            "texlive-core",
             "texlive-type1cm",
         ],
     ):
-         return True
-    logger.error("Failed to sync repositories or install texlive-bin.")
+        return True
+    logger.error("Failed to sync repositories or install texlive packages.")
     return None
 
 
 def install_latex_suse() -> bool | None:
     """Installs LaTeX on SUSE-based distribution."""
     logger.info("Detected SUSE-based distribution (zypper).")
-    logger.info("Attempting to install texlive...")
-    if run_command(["zypper", "install", "--non-interactive", "texlive", "texlive-type1cm"]):
+    logger.info("Attempting to install texlive, texlive-dvipng, and extras...")
+    # SUSE distros often have a dedicated texlive-dvipng package
+    if run_command(
+        [
+            "zypper",
+            "install",
+            "--non-interactive",
+            "texlive",
+            "texlive-type1cm",
+            "texlive-dvipng",
+        ]
+    ):
         return True
 
-    logger.error("Failed to install texlive.")
+    logger.error("Failed to install texlive packages.")
     return None
 
 
@@ -79,13 +101,14 @@ def install_latex_alpine() -> bool | None:
     """Install LaTeX on Alpine Linux."""
     logger.info("Detected Alpine Linux (apk).")
     if run_command(["apk", "update"]):
-        logger.info("Attempting to install texlive...")
-        if run_command(["apk", "add", "texlive", "texlive-type1cm"]):
+        logger.info("Attempting to install texlive, dvipng, and extras...")
+        if run_command(["apk", "add", "texlive", "texlive-type1cm", "dvipng"]):
             return True
-        logger.error("Failed to install texlive.")
+        logger.error("Failed to install texlive packages.")
         return None
     logger.error("Failed to update apk repositories.")
     return None
+
 
 def install_latex_linux() -> bool:
     """Installs LaTeX on Linux."""
@@ -109,7 +132,8 @@ def install_latex_linux() -> bool:
     # --- Fedora / RHEL / CentOS / Rocky / Alma ---
     elif (
         distro_id in ["fedora", "rhel", "centos", "rocky", "almalinux"]
-        or "fedora" in id_like or "rhel" in id_like
+        or "fedora" in id_like
+        or "rhel" in id_like
     ):
         latex_installed = install_latex_rhel()
 
@@ -118,8 +142,10 @@ def install_latex_linux() -> bool:
         latex_installed = install_latex_arch()
 
     # --- openSUSE / SLES ---
-    elif (distro_id in ["opensuse", "opensuse-leap", "opensuse-tumbleweed", "sles"]
-          or "suse" in id_like):
+    elif (
+        distro_id in ["opensuse", "opensuse-leap", "opensuse-tumbleweed", "sles"]
+        or "suse" in id_like
+    ):
         latex_installed = install_latex_suse()
 
     # --- Alpine Linux ---
@@ -128,21 +154,25 @@ def install_latex_linux() -> bool:
 
     # --- Unsupported ---
     else:
-        logger.error(f"Error: Unsupported distribution:"
-                     f"ID='{distro_id}', ID_LIKE='{id_like}'")
-        return False # Definitely failed
+        logger.error(
+            f"Error: Unsupported distribution:ID='{distro_id}', ID_LIKE='{id_like}'"
+        )
+        return False  # Definitely failed
 
     if not latex_installed:
         logger.error("LaTeX installation failed.")
 
     return latex_installed
 
+
 def install_latex_macos() -> bool:
     """Installs MacTeX on macOS using Homebrew."""
     logger.info("Detected macOS.")
     if not shutil.which("brew"):
-        logger.error("Homebrew ('brew') not found."
-                     "Please install Homebrew first. See: https://brew.sh/")
+        logger.error(
+            "Homebrew ('brew') not found."
+            "Please install Homebrew first. See: https://brew.sh/"
+        )
         return False
 
     logger.info("Found Homebrew.")
@@ -151,41 +181,54 @@ def install_latex_macos() -> bool:
     if not success:
         logger.warning("'brew update' failed, attempting install anyway.")
 
-    logger.info("Installing MacTeX (mactex)..."
-                "This is a large download and may take a significant amount of time.")
+    logger.info(
+        "Installing MacTeX (mactex)..."
+        "This is a large download and may take a significant amount of time."
+    )
+    # The mactex cask is a full TeX distribution and includes dvipng.
     success = run_command(["brew", "install", "--cask", "mactex"])
     if not success:
-        logger.error("Failed to install mactex with Homebrew."
-                     "Try running manually: brew install --cask mactex"
-                     "You might need to agree to licenses or enter your password.")
+        logger.error(
+            "Failed to install mactex with Homebrew."
+            "Try running manually: brew install --cask mactex"
+            "You might need to agree to licenses or enter your password."
+        )
         return False
     return True
 
+
 def install_latex_windows() -> bool:
     """Installs LaTeX (MiKTeX or TeX Live) on Windows using winget or choco."""
-    logger.info("Detected Windows."
-                "This script requires Administrator privileges to install software."
-                "Attempting to install MiKTeX.")
+    logger.info(
+        "Detected Windows."
+        "This script requires Administrator privileges to install software."
+        "Attempting to install MiKTeX."
+    )
 
     use_winget = shutil.which("winget")
     use_choco = shutil.which("choco")
 
+    # Full MiKTeX distribution includes dvipng by default.
     if use_winget:
         logger.info("Found 'winget' package manager.")
         pkg_id = "MiKTeX.MiKTeX"
 
         logger.info(f"Installing {pkg_id} using winget...")
         cmd = [
-            "winget", "install",
-            "--id", pkg_id,
+            "winget",
+            "install",
+            "--id",
+            pkg_id,
             "-e",
             "--accept-source-agreements",
             "--accept-package-agreements",
         ]
         success = run_command(cmd)
         if not success:
-            logger.error(f"Failed to install {pkg_id} using winget."
-                         f"Try running winget install manually in an Admin prompt.")
+            logger.error(
+                f"Failed to install {pkg_id} using winget."
+                f"Try running winget install manually in an Admin prompt."
+            )
             return False
         return True
 
@@ -197,31 +240,48 @@ def install_latex_windows() -> bool:
         cmd = ["choco", "install", pkg_id, "-y"]
         success = run_command(cmd)
         if not success:
-            logger.error(f"Failed to install {pkg_id} using Chocolatey. "
-                         f"Try running choco install manually in an Admin prompt.")
+            logger.error(
+                f"Failed to install {pkg_id} using Chocolatey. "
+                f"Try running choco install manually in an Admin prompt."
+            )
             return False
         return True
 
-    error_msg = ("Could not find 'winget' or 'choco'."
-                "Please install either Windows Package Manager (winget) or Chocolatey "
-                "or install MiKTeX/TeX Live manually from their respective websites:"
-                "MiKTeX: https://miktex.org/download"
-                "TeX Live: https://www.tug.org/texlive/acquire-netinstall.html")
+    error_msg = (
+        "Could not find 'winget' or 'choco'."
+        "Please install either Windows Package Manager (winget) or Chocolatey "
+        "or install MiKTeX/TeX Live manually from their respective websites:"
+        "MiKTeX: https://miktex.org/download"
+        "TeX Live: https://www.tug.org/texlive/acquire-netinstall.html"
+    )
     logger.error(error_msg)
     return False
 
 
 def verify_installation() -> bool:
-    """Check if cmake command is available and runs --version."""
-    logger.info("Verifying LaTeX (pdfTeX) installation")
-    cmake_path = shutil.which("pdftex")
-    if cmake_path:
-        logger.info(f"LaTeX executable found at: {cmake_path}")
-        return run_command(["pdftex", "--version"], admin=False, suppress_output=True)
-    logger.error(
-        "Error: 'pdftex' command not found in PATH after installation attempt.",
-    )
-    return False
+    """Check if essential LaTeX commands (pdftex, dvipng) are available."""
+    logger.info("Verifying LaTeX installation (pdftex and dvipng)...")
+    pdftex_path = shutil.which("pdftex")
+    dvipng_path = shutil.which("dvipng")
+
+    if pdftex_path:
+        logger.info(f"pdfTeX executable found at: {pdftex_path}")
+    else:
+        logger.error("Error: 'pdftex' command not found in PATH.")
+        return False
+
+    if dvipng_path:
+        logger.info(f"dvipng executable found at: {dvipng_path}")
+    else:
+        logger.error("Error: 'dvipng' command not found in PATH.")
+        return False
+
+    logger.info("Checking versions...")
+    pdftex_ok = run_command(["pdftex", "--version"], suppress_output=True)
+    dvipng_ok = run_command(["dvipng", "--version"], suppress_output=True)
+
+    return pdftex_ok and dvipng_ok
+
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -231,11 +291,15 @@ if __name__ == "__main__":
     logger.info("Starting LaTeX installation script...")
 
     if verify_installation():
-        logger.info("LaTeX is already installed, no need to continue.")
+        logger.info("LaTeX (pdftex and dvipng) is already installed and verified.")
         sys.exit(0)
+    else:
+        logger.warning(
+            "LaTeX installation not found or incomplete. Proceeding with installation."
+        )
 
-    # Warn if running as root directly
-    if os.geteuid() == 0:
+    # Warn if running as root directly on non-Windows
+    if system != "Windows" and os.geteuid() == 0:
         logger.warning("Running script as root.")
         logger.info("Package manager commands will be run directly without 'sudo'.")
 
@@ -243,7 +307,7 @@ if __name__ == "__main__":
 
     if system == "Linux":
         install_successful = install_latex_linux()
-    elif system == "MacOS":
+    elif system == "Darwin":  # Correct platform name for macOS
         install_successful = install_latex_macos()
     elif system == "Windows":
         install_successful = install_latex_windows()
@@ -251,11 +315,11 @@ if __name__ == "__main__":
     if install_successful:
         logger.info("LaTeX installation commands executed successfully.")
         if verify_installation():
-             logger.info("LaTeX installation verified.")
-             sys.exit(0) # Exit with success code
+            logger.info("LaTeX installation fully verified.")
+            sys.exit(0) # Exit with success code
         else:
-             logger.error("LaTeX installation command ran, but verification failed.")
-             sys.exit(1) # Exit with error code
+            logger.error("LaTeX installation command ran, but verification failed.")
+            sys.exit(1) # Exit with error code
     else:
         logger.error("LaTeX installation failed.")
         sys.exit(1) # Exit with error code

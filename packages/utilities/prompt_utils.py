@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -26,17 +27,19 @@ from google.genai.types import (
     VoiceConfig,
 )
 
+from bot.setup import DEFAULT_TOOLS_MAP
 from packages.maps import (
     BLOCKED_CATEGORY,
     HARM_BLOCK_CATEGORY,
     HARM_PRETTY_NAME,
+    IMAGE_GENERATION_MODELS,
     MAX_MESSAGE_LENGTH,
     YOUTUBE_PATTERN,
 )
 from packages.utilities.errors import HandleAttachmentError
 from packages.utilities.file_utils import (
     handle_attachment,
-    load_config,
+    read_config,
     read_temp_config,
     save_temp_config,
     wait_for_file_active,
@@ -60,6 +63,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+@dataclass
+class PromptData:
+    """Holds all necessary data for processing an AI prompt."""
+    ctx: commands.Context
+    clean_message: str
+    model: str
+    api_config: GenerateContentConfig
+    safety_setting: HarmBlockThreshold
+    temp_config_for_prompt: dict
+    active_tools: list
+    formatted_time: str
 
 def make_safety_setting(safety_setting: HarmBlockThreshold) -> list[SafetySetting]:
     """Make a safety setting template.
@@ -99,6 +113,7 @@ def generate_config(
         auto_func_call: AutomaticFunctionCallingConfig | None,
         response_modalities: list[str],
         temperature: float | None,
+        thinking: bool | None = True,
 ) -> GenerateContentConfig:
     """Generate a config for Gemini.
 
@@ -109,6 +124,7 @@ def generate_config(
         auto_func_call: an automatic function calling config
         response_modalities: how you want Gemini to respond
         temperature: the temperature you want to give the LLM
+        thinking: whether or not to enable thinking
 
     Returns:
         A GenerateContentConfig with system instructions, tools, safety settings,
@@ -127,7 +143,7 @@ def generate_config(
         thinking_config=ThinkingConfig(
             include_thoughts=temp_config["thinking"],
             thinking_budget=temp_config["thinking_budget"],
-        ),
+        ) if thinking else None,
     )
 
 
@@ -349,7 +365,7 @@ def prepare_api_config(
         tools: list[Tool],
 ) -> tuple[str, GenerateContentConfig, HarmBlockThreshold, dict]:
     """Load config and prepares the API configuration object."""
-    config = load_config()
+    config = read_config()
     safety_setting_config = config["HarmBlockThreshold"]
     safety_setting = HARM_BLOCK_CATEGORY[safety_setting_config]
     temperature = config["Temperature"]
@@ -357,16 +373,21 @@ def prepare_api_config(
     temp_config = read_temp_config()
     model = temp_config["model"]
     safety_settings = make_safety_setting(safety_setting)
+    thinking = True
 
-    if model == "gemini-2.0-flash-exp-image-generation":
+    if model in IMAGE_GENERATION_MODELS:
         response_modalities = ["Text", "Image"]
         tool_func_call = None
         auto_func_call = None
         system_instructions = None
+        thinking = None
     else:
         response_modalities = None
         tool_func_call = tools
         auto_func_call = AutomaticFunctionCallingConfig(maximum_remote_calls=5)
+        system_instructions = temp_config["system_prompt_data"]
+
+    if model == 'gemini-2.5-flash-image-preview':
         system_instructions = temp_config["system_prompt_data"]
 
     api_config = generate_config(
@@ -376,6 +397,7 @@ def prepare_api_config(
         auto_func_call,
         response_modalities,
         temperature,
+        thinking
     )
     return model, api_config, safety_setting, temp_config
 
@@ -509,8 +531,6 @@ async def send_message_and_handle_status(
     safety_setting: str,
 ) -> tuple[
     GenerateContentResponse,
-    list[Candidate],
-    Candidate,
     FinishReason | None,
 ] | None:
     """Send the message to the chat and handles immediate finish reasons.
@@ -560,7 +580,7 @@ async def send_message_and_handle_status(
         )
         return None
 
-    return response, candidates, first_candidate, finish_reason
+    return response, finish_reason
 
 
 async def process_response_parts(
@@ -602,7 +622,7 @@ def cleanup_files(file_names: list[str]) -> None:
                 Path(file).unlink()
                 logger.info(f"Deleted {Path(file).name} at local server")
             except OSError:
-                 logger.exception(f"Failed to delete file {file}.")
+                logger.exception("Failed to delete file %s.", file)
 
 
 def generate_audio_config(voice_name: str) -> GenerateContentConfig:
@@ -624,3 +644,26 @@ def generate_audio_config(voice_name: str) -> GenerateContentConfig:
             ),
         ),
     )
+
+def get_active_tools() -> list:
+    """Gets the current active tool.
+
+    Returns:
+        The current active tool.
+    """
+    temp_config = read_temp_config()
+    active_tools_name = temp_config.get("active_tools_name", "Nothing")
+    return DEFAULT_TOOLS_MAP[active_tools_name]
+
+
+async def execute_ai_chat(
+    chat: AsyncChat, final_prompt: list | str, data: PromptData,
+) -> tuple[GenerateContentResponse, FinishReason]:
+    """Sends the prompt to the AI and handles the response status."""
+    response, finish_reason = await send_message_and_handle_status(
+        chat,
+        final_prompt,
+        data.ctx,
+        data.safety_setting,
+    )
+    return response, finish_reason

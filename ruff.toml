@@ -5,5 +5,5 @@ select = [
 pydocstyle.convention = "google"
 
 [per-file-ignores]
-"*" = ["D100", "SLF001", "PTH123", "D104", "G004", "TRY300", "S607", "S603", "PLR0913", "S311", "PLW0603", "FBT", "TRY301"]
+"*" = ["D100", "SLF001", "PTH123", "D104", "G004", "TRY300", "S607", "S603", "PLR0913", "S311", "PLW0603", "FBT", "TRY301", "TRY002", "PGH003", "S105"]
 "tests/*" = ["S101", "ERA001", "PLR0913", "ARG001"]

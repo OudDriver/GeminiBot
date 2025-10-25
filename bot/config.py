@@ -48,7 +48,7 @@ class ConfigManager:
         except Exception as e:
             self.logger.error("An error occurred during configuration reload: %s", e, exc_info=True)
 
-    async def start_hot_reload_loop(self, interval_seconds: int = 5) -> None:
+    async def start_hot_reload_loop(self, interval_seconds: float = 5) -> None:
         """Starts a background task to periodically check for config changes."""
         self.logger.info("Starting configuration hot-reload loop (check interval: %ss).", interval_seconds)
         while True:

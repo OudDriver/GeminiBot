@@ -17,5 +17,6 @@
       "SystemPrompt": "Your Actual System Prompt."
     }
   ],
-  "HarmBlockThreshold": "BLOCK_LOW_AND_ABOVE, BLOCK_MEDIUM_AND_ABOVE, BLOCK_ONLY_HIGH, BLOCK_NONE"
+  "HarmBlockThreshold": "BLOCK_LOW_AND_ABOVE, BLOCK_MEDIUM_AND_ABOVE, BLOCK_ONLY_HIGH, BLOCK_NONE",
+  "Temperature": 1
 }

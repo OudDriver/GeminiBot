@@ -24,14 +24,19 @@ class ListCog(commands.Cog, name="Listing"):
 
         embed = discord.Embed(
             title="Available Bot Resources",
-            description="Live data from `config.json`. Changes will appear here automatically.",
             color=discord.Color.blue()
         )
 
         # Format and add system prompts to the embed
         prompt_names = [p.get("Name", "Unnamed Prompt") for p in prompts]
         if prompt_names:
-            embed.add_field(name="System Prompts", value="\n".join(f"{i + 1}. {name}" for i, name in enumerate(prompt_names)), inline=False)
+            embed.add_field(
+                name="System Prompts",
+                value="\n".join(
+                    f"{i + 1}. {name}" for i, name in enumerate(prompt_names)
+                ),
+                inline=False,
+            )
 
         # Format and add models to the embed
         if models:

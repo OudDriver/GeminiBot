@@ -1,7 +1,14 @@
 import logging
 import platform
+import sys
 
-from installs.install_utils.install_utils import run_command, setup_logging
+try:
+    from installs.install_utils.install_utils import run_command, setup_logging
+except ModuleNotFoundError:
+    print("tdqm and/or requests not found!")
+    print("Please install using")
+    print("pip install tqdm requests")
+    sys.exit(1)
 
 if __name__ == "__main__":
     python_interpreter = "python3" if platform.platform() == "Linux" else "python"

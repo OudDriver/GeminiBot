@@ -51,8 +51,8 @@ def setup_gemini(api_key: str, api_version: str = "v1alpha") -> genai.Client:
     )
 
 def initialize_temp_config(bot_config: dict) -> None:
-    """
-    Initializes or updates temp/temp_config.json with default values.
+    """Initializes or updates temp/temp_config.json with default values.
+
     This ensures all necessary dynamic keys are present on startup.
     """
     temp_config_path = Path("temp/temp_config.json")
@@ -60,27 +60,21 @@ def initialize_temp_config(bot_config: dict) -> None:
 
     system_prompts_from_config = bot_config.get("SystemPrompts", [])
     model_names_from_config = bot_config.get("ModelNames", {})
-    tool_set_names_from_config = list(bot_config.get("Tools", DEFAULT_TOOLS_MAP).keys()) # Using DEFAULT_TOOLS_MAP as a fallback for keys
+    tool_set_names_from_config = list(bot_config.get("Tools", DEFAULT_TOOLS_MAP).keys())
 
     initial_sys_prompt_index = 0
-    initial_system_prompt_data = system_prompts_from_config[initial_sys_prompt_index]["SystemPrompt"]
-    initial_system_prompt_name = system_prompts_from_config[initial_sys_prompt_index]["Name"]
-    
-    initial_model_id = list(model_names_from_config.keys())[0]
+    initial_system_prompt_data = system_prompts_from_config[
+        initial_sys_prompt_index
+    ]["SystemPrompt"]
+    initial_system_prompt_name = system_prompts_from_config[
+        initial_sys_prompt_index
+    ]["Name"]
+
+    initial_model_id = next(iter(model_names_from_config.keys()))
     initial_model_index = 0
 
     initial_active_tools_name = tool_set_names_from_config[0]
     initial_active_tools_index = 0 # Corresponds to the first toolset name
-
-    # Read current temp config to merge new defaults
-    current_temp_config = {}
-    if temp_config_path.exists():
-        try:
-            with open(temp_config_path, "r", encoding="utf-8") as f:
-                current_temp_config = json.load(f)
-        except json.JSONDecodeError:
-            logger.warning(f"Corrupted {temp_config_path} found. Reinitializing.")
-            current_temp_config = {} # Start fresh if corrupted
 
     # Define default state for temp_config.json
     default_temp_config = {
@@ -91,7 +85,7 @@ def initialize_temp_config(bot_config: dict) -> None:
         "current_sys_prompt_index": initial_sys_prompt_index,
         "current_uwu_status": False,
         "thought": [],
-        "secret": "",
+        "secret": [],
         "active_tools_name": initial_active_tools_name,
         "active_tools_index": initial_active_tools_index,
         "thinking": True,
@@ -100,8 +94,8 @@ def initialize_temp_config(bot_config: dict) -> None:
         "tool_call": [],
     }
 
-    if os.path.exists(temp_config_path):
-        os.remove(temp_config_path)
+    if Path(temp_config_path).exists():
+        Path(temp_config_path).unlink()
 
     with open(temp_config_path, "w", encoding="utf-8") as f:
         json.dump(default_temp_config, f, indent=4)
@@ -118,7 +112,13 @@ DEFAULT_TOOLS_MAP = {
         search_duckduckgo,
         save_memory,
     ],
-    "Google Search & Code Execution": [Tool(google_search=GoogleSearch()), Tool(code_execution=ToolCodeExecution())],
-    "Google Search & URL Context": [Tool(google_search=GoogleSearch()), Tool(url_context=UrlContext())],
+    "Google Search & Code Execution": [
+        Tool(google_search=GoogleSearch()),
+        Tool(code_execution=ToolCodeExecution()),
+    ],
+    "Google Search & URL Context": [
+        Tool(google_search=GoogleSearch()),
+        Tool(url_context=UrlContext()),
+    ],
     "Nothing": [],
 }

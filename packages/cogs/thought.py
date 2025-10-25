@@ -1,10 +1,10 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
-import discord
+
 from discord.ext import commands
 
 from packages.utilities.file_utils import read_temp_config
-from packages.utilities.general_utils import remove_thought_tags
 
 if TYPE_CHECKING:
     from main import GeminiBot
@@ -13,7 +13,8 @@ if TYPE_CHECKING:
 class ThoughtCog(commands.Cog, name="Thought"):
     """A cog for displaying the bot's internal thought process."""
 
-    def __init__(self, bot: "GeminiBot"):
+    def __init__(self, bot: GeminiBot) -> None:
+        """Initialize the Cog."""
         self.bot = bot
 
     @commands.hybrid_command(name="thought")
@@ -28,11 +29,8 @@ class ThoughtCog(commands.Cog, name="Thought"):
             await ctx.send("None", ephemeral=True)
             return
 
-        for t in thoughts:
-            thoughts_found += remove_thought_tags(t) + "\n\n"
+        await ctx.send(thoughts_found, ephemeral=True)
 
-        await ctx.send(thoughts_found, ephemeral=True) # Changed to ephemeral for sensitive info
-
-async def setup(bot: "GeminiBot"):
+async def setup(bot: GeminiBot) -> None:
     """Adds the ThoughtCog to the bot."""
     await bot.add_cog(ThoughtCog(bot))

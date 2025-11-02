@@ -9,7 +9,7 @@ from packages.utilities.general_utils import generate_unique_file_name
 logger = logging.getLogger(__name__)
 
 def sanitize_latex(latex_text: str) -> str:
-    """Remove any newlines and tex tags.
+    """Remove any newlines.
 
     Args:
         latex_text: The LaTeX tag you want to sanitize.
@@ -18,8 +18,7 @@ def sanitize_latex(latex_text: str) -> str:
         The sanitized text
 
     """
-    no_tag = regex.sub(r"<tex>|</tex>", "", latex_text)
-    return regex.sub(r"\n", " ", no_tag)
+    return regex.sub(r"\n", " ", latex_text)
 
 
 def render_latex(
@@ -28,7 +27,7 @@ def render_latex(
         padding: int=20,
         background_color: str="black",
         text_color: str="white",
-        dpi: int=300,
+        dpi: int=600,
         font_size: int=12,
 ) -> str | None:
     r"""Render a LaTeX string into a PNG image.
@@ -107,23 +106,31 @@ def render_latex(
         return None
 
 def split_tex(input_str: str) -> tuple[list[str], bool]:
-    """Splits a string into normal parts and parts with <tex></tex> tags.
+    """Splits a string into normal parts and TeX math parts.
+
+    This supports both inline math ($...$) and display math ($$...$$ or \[...\]).
+    It also correctly handles multiline math content.
 
     Args:
         input_str: The input to split.
 
     Returns:
-        A tuple consisting of a list of strings,
-        and a boolean to indicate if that string did split.
+        A tuple consisting of:
+        - A list of strings, alternating between normal text and TeX math.
+        - A boolean indicating if any TeX math was found.
     """
-    regex_split = regex.split(r"(<tex>.*?</tex>)", input_str)
-    has_tex = True
-    if len(regex_split) <= 1:
-        has_tex = False
-    return regex_split, has_tex
+    pattern = r"(\$\$.*?\$\$|\\\[.*?\\\]|\$.*?\$)"
+
+    # We use regex.split to keep the delimiters
+    parts = regex.split(pattern, input_str, flags=regex.DOTALL)
+
+    non_empty_parts = [p for p in parts if p]
+    has_tex = len(non_empty_parts) > 1 or (len(non_empty_parts) == 1 and non_empty_parts[0] != input_str)
+
+    return non_empty_parts, has_tex
 
 def check_tex(input_str: str) -> bool:
-    """Checks if a string starts with <tex> and ends with </tex>.
+    """Checks if a string starts with $ and ends with $.
 
     Args:
         input_str: The input string to check.
@@ -131,4 +138,4 @@ def check_tex(input_str: str) -> bool:
     Returns:
         A boolean if that string is a
     """
-    return input_str.startswith("<tex>") and input_str.endswith("</tex>")
+    return input_str.startswith("$") and input_str.endswith("$")

@@ -208,7 +208,7 @@ def process_latex_chunk(tex_chunk: str) -> tuple[str | discord.File, str | None]
         return tex_chunk, None  # Not LaTeX, return as is
 
     logger.info(f"Attempting to render LaTeX: {tex_chunk}")
-    file_path = render_latex(tex_chunk) # Assumes this returns path or None
+    file_path = render_latex(tex_chunk)
 
     if file_path:
         try:
@@ -351,7 +351,7 @@ async def validate_invocation(ctx: commands.Context, message: str) -> bool:
     if not (is_reply_to_bot or is_mention):
         return True  # Not a valid invocation
 
-    if not message:
+    if not message and not ctx.message.attachments:
         await ctx.send(
             "You mentioned me or replied to me, "
             "but you didn't give me any prompt!",
@@ -544,7 +544,12 @@ async def send_message_and_handle_status(
     candidates = response.candidates
     if not candidates:
          logger.warning("API returned no candidates.")
-         await ctx.reply("The AI did not return a valid response.")
+         logger.warning(f"Response:\n{response}")
+         await ctx.reply(
+             "The AI did not return a valid candidate. "
+             "It may be because it's blocked. If so, here's the reason:\n"
+             f"`{response.prompt_feedback.block_reason}`",
+         )
          return None
 
     first_candidate = candidates[0]

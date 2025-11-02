@@ -9,13 +9,13 @@ import sys
 import time
 from pathlib import Path
 
-from install_utils.install_utils import (
+from installs.install_utils.install_utils import (
     download_file_with_progress,
     get_distro_info,
     run_command,
     setup_logging,
-    start_docker_daemon,
 )
+from packages.utilities.general_utils import start_docker_daemon
 
 # Constants
 DOCKERFILE_CONTENT = """
@@ -122,34 +122,79 @@ def _configure_docker_group() -> bool:
         return False
 
 def verify_docker() -> bool:
-    """Verify if docker command exists and the daemon is active."""
+    """
+    Verify if docker command exists and the daemon is active.
+
+    This function distinguishes between two main failure cases:
+    1. 'docker' command is not found in the PATH (Docker not installed).
+    2. 'docker' command is found, but it cannot connect to the daemon
+       (Docker Desktop / daemon not running, or permissions issue).
+    """
     logger.info("Verifying Docker...")
+
+    # --- Step 1: Check if the 'docker' executable is in the PATH ---
     docker_path = shutil.which("docker")
     if not docker_path:
-        logger.info("'docker' command not found in PATH.")
+        logger.error("--- Docker Not Found ---")
+        logger.error("'docker' command not found in your system's PATH.")
+        logger.error("This means Docker is likely not installed.")
         return False
     logger.info(f"Docker executable found at: {docker_path}")
 
+    # --- Step 2: Check for daemon connectivity by running 'docker info' ---
     logger.info("Checking Docker daemon connectivity ('docker info')...")
-    # Use a simple command like 'docker info' which requires daemon connection
-    if run_command(["docker", "info"], suppress_output=True):
-        logger.info("Docker daemon is running and responding.")
-        return True  # Success! Docker is ready.
-
-    logger.warning("Could not connect to Docker daemon.")
-    if system == "Linux":
-        logger.warning("Check Docker service status: sudo systemctl status docker")
-        logger.warning(
-            "Check user permissions "
-            "(are you in the 'docker' group? Did you log out/in after group change?)",
+    try:
+        result = subprocess.run(
+            ["docker", "info"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10
         )
-    elif system in {"Darwin", "Windows"}:
-        logger.warning("Ensure Docker Desktop is running and has finished starting.")
-    return False
+
+        if result.returncode == 0:
+            logger.info("Docker daemon is running and responding.")
+            return True
+
+        # --- Step 3: Analyze the error if the command failed ---
+        logger.warning("--- Docker Found, But Daemon Not Responding ---")
+        stderr_lower = result.stderr.lower()
+
+        if "permission denied" in stderr_lower:
+            logger.error("Error: Permission denied while trying to connect to the Docker daemon socket.")
+            logger.warning("This is a common issue on Linux.")
+            logger.warning("1. Ensure your user is in the 'docker' group: `sudo usermod -aG docker $USER`")
+            logger.warning("2. IMPORTANT: You MUST log out and log back in for the group change to take effect.")
+            logger.warning("3. As a temporary workaround, you can try running commands with `sudo`.")
+
+        # --- THIS IS THE MODIFIED LINE ---
+        # Check for the generic "daemon not running" message OR the specific Windows pipe error.
+        elif "is the docker daemon running" in stderr_lower or "pipe/docker" in stderr_lower:
+            if system == "Linux":
+                logger.error("Error: The Docker daemon does not appear to be running.")
+                logger.warning("You can try to start it with: `sudo systemctl start docker`")
+                logger.warning("Check its status with: `sudo systemctl status docker`")
+            elif system in {"Darwin", "Windows"}:
+                logger.error("Error: Could not connect to Docker Desktop.")
+                logger.warning("Please ensure the Docker Desktop application is running and has finished starting.")
+
+        else:
+            # A more generic error message if we can't parse the specific reason
+            logger.error("An unknown error occurred while trying to connect to the Docker daemon.")
+            logger.error(f"Command 'docker info' failed with exit code {result.returncode}.")
+            logger.error(f"Error details: {result.stderr.strip()}")
+
+        return False
+
+    except FileNotFoundError:
+        logger.error("'docker' command was not found when trying to execute it.")
+        return False
+    except subprocess.TimeoutExpired:
+        logger.error("'docker info' command timed out. The Docker daemon might be starting up, or it could be frozen.")
+        return False
 
 
 # Linux Installation Functions
-
 def install_docker_debian() -> bool:
     """Installs Docker on Debian/Ubuntu."""
     logger.info("Configuring Docker repository for Debian/Ubuntu...")
@@ -419,117 +464,103 @@ def build_docker_image() -> bool:
 
 def verify_image() -> bool:
     """Verify if the image exists."""
-    attempts = 4
-    for i in range(attempts):
-        logger.info(f"Trying to check if image exists. Check {i+1}/{attempts}")
-        if run_command(
-            ["docker", "image", "inspect", DOCKER_IMAGE_NAME],
-            suppress_output=True,
-        ):
-            logger.info("Image exists.")
-            return True
-        logger.info("Attempting to start docker daemon.")
-        start_docker_daemon()
-        time.sleep(4)
+    logger.info(f"Trying to check if image exists.")
+    if run_command(
+        ["docker", "image", "inspect", DOCKER_IMAGE_NAME],
+        suppress_output=True,
+    ):
+        logger.info("Image exists.")
+        return True
     logger.info("Image doesn't exist. Installing.")
     return False
 
 # Main Execution
 if __name__ == "__main__":
     setup_logging()
-    logger = logging.getLogger(__name__) # Assign to global logger
+    logger = logging.getLogger(__name__)
 
     logger.info("Starting Docker Setup and Sandbox Image Build")
 
-    # 1. Check if Docker is already running and usable
-    if verify_docker():
-        logger.info("Docker is already installed and the daemon is responding.")
-        logger.info("Checking if sandbox image needs to be built...")
-        if verify_image():
-             logger.info(f"Docker image '{DOCKER_IMAGE_NAME}' already exists.")
-             logger.info("Setup complete.")
-             sys.exit(0)
-        else:
-             logger.info(f"Docker image '{DOCKER_IMAGE_NAME}' not found. "
-                         f"Proceeding to build...")
-             if build_docker_image():
-                 logger.info("Setup Complete")
-                 sys.exit(0)
-             else:
-                 logger.error("Image Build Failed")
-                 sys.exit(1)
+    # --- RESTRUCTURED LOGIC ---
 
+    # Case 1: 'docker' command is not found at all. Docker needs to be installed.
+    if not shutil.which("docker"):
+        logger.warning("--- Docker Not Found ---")
+        logger.info("'docker' command not found in PATH. Attempting installation...")
 
-    logger.info("Docker not found or daemon not responding. Attempting installation...")
+        # Warn if running as root
+        if system != "Windows" and os.geteuid() == 0:
+            logger.warning("Running script as root. Package manager commands will be run directly without 'sudo'.")
 
-    # Warn if running as root directly (except Windows where it might be necessary)
-    if system != "Windows" and os.geteuid() == 0:
-        logger.warning("Running script as root.")
-        logger.info("Package manager commands will be run directly without 'sudo'.")
-
-
-    # 2. Attempt Installation based on OS
-    install_initiated = False
-    if system == "Linux":
-        install_initiated = install_docker_linux()
-    elif system == "Darwin": # platform.system() returns 'Darwin' for macOS
-        install_initiated = install_docker_macos()
-    elif system == "Windows":
-        install_initiated = install_docker_windows()
-    else:
-        logger.error(f"Unsupported operating system: {system}.")
-        logger.error("Manual Docker installation is required.")
-        sys.exit(1)
-
-    if not install_initiated:
-        logger.error("Docker Installation Failed")
-        logger.error("Installation commands failed or prerequisites were not met.")
-        logger.error("Please review the logs above for details.")
-        sys.exit(1)
-
-    # 3. Post-Installation Actions (Verification & Build)
-    logger.info("Installation commands/launcher executed.")
-    logger.info("Attempting Docker verification again...")
-
-    if verify_docker():
-        logger.info("Docker verified successfully post-installation.")
-        logger.info("Proceeding to Image Build")
-        if build_docker_image():
-            logger.info("Setup Complete")
-            logger.info(f"The Docker image '{DOCKER_IMAGE_NAME}' is ready.")
-            sys.exit(0) # Success
-        else:
-            logger.error("Image Build Failed")
-            logger.error("Please check the error messages above.")
-            sys.exit(1) # Exit if build failed
-    else:
-        logger.warning("Docker Verification Failed Post-Installation")
+        # Attempt Installation based on OS
+        install_initiated = False
         if system == "Linux":
-            logger.warning(
-                "Verification failed. This might be expected if you haven't "
-                "logged out and back in yet for group permissions.",
-            )
-            logger.warning(
-                "Try logging out/in, then run 'docker info' or run this script again.",
-            )
-            logger.warning("Also check service status: sudo systemctl status docker")
-        elif system in ["Darwin", "Windows"]:
-            logger.warning(
-                "Verification failed. This is often expected on macOS/Windows.",
-            )
-            logger.warning(
-                "Ensure Docker Desktop is fully started and configured.",
-            )
-            logger.warning(
-                "On Windows, you might need to log out and log back in first.",
-            )
-            logger.warning(
-                "Once Docker Desktop is running, "
-                "try running this script again to build the image.",
-            )
+            install_initiated = install_docker_linux()
+        elif system == "Darwin":
+            install_initiated = install_docker_macos()
+        elif system == "Windows":
+            install_initiated = install_docker_windows()
+        else:
+            logger.error(f"Unsupported operating system: {system}.")
+            logger.error("Manual Docker installation is required.")
+            sys.exit(1)
 
-        logger.error(
-            "Docker is not ready. "
-            "Cannot build the sandbox image at this time.",
-        )
-        sys.exit(1) # Exit because Docker isn't ready for the build step
+        if not install_initiated:
+            logger.error("Docker Installation Failed. Please review the logs above.")
+            sys.exit(1)
+
+        # After attempting install, verify if it's now ready.
+        logger.info("Installation commands/launcher executed.")
+        logger.info("Re-checking Docker status...")
+        if not verify_docker():
+            logger.error("Docker is still not ready after the installation attempt.")
+            logger.warning("This is common on macOS/Windows where Docker Desktop requires manual setup, or on Linux if a logout/login is needed.")
+            logger.warning("Please complete the Docker installation, ensure it is running, and then run this script again.")
+            sys.exit(1)
+
+
+    # Case 2: Docker is installed, but the daemon/desktop is not running.
+    elif not verify_docker():
+        logger.warning("--- Docker Found, But Daemon Is Not Responding ---")
+        logger.info("Attempting to start the Docker daemon automatically...")
+
+        start_docker_daemon()
+
+        is_docker_ready = False
+        max_wait_seconds = 20
+        poll_interval_seconds = 5
+        for i in range(max_wait_seconds // poll_interval_seconds):
+            print(".", end="", flush=True)
+            if verify_docker():
+                print("\n")
+                logger.info("Docker daemon started successfully!")
+                is_docker_ready = True
+                break
+            time.sleep(poll_interval_seconds)
+
+        if not is_docker_ready:
+            print("\n")
+            logger.error("Timed out waiting for Docker daemon.")
+            logger.error("The script could not automatically start Docker.")
+            if system in {"Darwin", "Windows"}:
+                logger.warning("ACTION REQUIRED: Please start Docker Desktop manually. Check for any pop-ups or error messages from the application.")
+            elif system == "Linux":
+                logger.warning("ACTION REQUIRED: Check the service status (`sudo systemctl status docker`) and ensure you have correct permissions.")
+            logger.warning("Once Docker is running, please run this script again.")
+            sys.exit(1)
+
+    # Case 3: Docker is installed and the daemon is responding. Proceed to image build.
+    logger.info("Docker is installed and the daemon is responding.")
+    logger.info("Checking if sandbox image needs to be built...")
+
+    if verify_image():
+        logger.info(f"Docker image '{DOCKER_IMAGE_NAME}' already exists. Setup complete.")
+        sys.exit(0)
+    else:
+        logger.info(f"Docker image '{DOCKER_IMAGE_NAME}' not found. Proceeding to build...")
+        if build_docker_image():
+            logger.info("Setup Complete. The Docker image is ready.")
+            sys.exit(0)
+        else:
+            logger.error("Image Build Failed.")
+            sys.exit(1)

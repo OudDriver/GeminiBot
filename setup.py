@@ -1,5 +1,4 @@
 import logging
-import platform
 import sys
 
 try:
@@ -11,22 +10,21 @@ except ModuleNotFoundError:
     sys.exit(1)
 
 if __name__ == "__main__":
-    python_interpreter = "python3" if platform.platform() == "Linux" else "python"
-    pip = "pip3" if platform.platform() == "Linux" else "pip"
+    python_interpreter = sys.executable
 
     setup_logging()
     logger = logging.getLogger(__name__)
 
-    cmake_command = run_command([python_interpreter, "installs/install_cmake.py"])
+    cmake_command = run_command([python_interpreter, "-m", "installs.install_cmake"])
     logger.info(f"Command returned: {cmake_command}")
 
-    install_command = run_command([pip, "install", "-r", "requirements.txt"])
+    install_command = run_command([python_interpreter, "-m", "pip", "install", "-r", "requirements.txt"])
     logger.info(f"Command returned: {install_command}")
 
-    docker_command = run_command([python_interpreter, "installs/install_docker.py"])
+    docker_command = run_command([python_interpreter, "-m", "installs.install_docker"])
     logger.info(f"Docker command exited with code {docker_command}")
 
-    latex_command = run_command([python_interpreter, "installs/install_latex.py"])
+    latex_command = run_command([python_interpreter, "-m", "installs.install_latex"])
     logger.info(f"LaTeX command exited with code {latex_command}")
 
     logger.info("Review any errors and run main.py!")

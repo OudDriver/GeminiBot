@@ -126,73 +126,6 @@ def _prepare_command_list(
     return cmd_list
 
 
-def start_docker_daemon() -> bool:  # noqa: PLR0911
-    """Attempt to start the Docker daemon on Windows, Linux, and macOS.
-
-    Returns:
-        bool: True if the Docker daemon appears to have started successfully,
-              False otherwise.  It returns True also if docker is already running
-
-    """
-    os_name = platform.system()
-
-    try:
-        if os_name == "Linux":
-            subprocess.run(
-                ["sudo", "docker", "info"], check=True, capture_output=True, text=True,
-            )
-        else:
-            subprocess.run(
-                ["docker", "info"], check=True, capture_output=True, text=True,
-            )
-        logger.info("Docker is already running.")
-        return True
-
-    except subprocess.CalledProcessError:
-        logger.warning("Docker is not running. Attempting to start...")
-
-        try:
-            if os_name == "Windows":
-                docker_desktop_path = (
-                    r"C:\Program Files\Docker\Docker\Docker Desktop.exe"
-                )
-                subprocess.run(
-                    [docker_desktop_path], check=True, capture_output=True, text=True,
-                )
-                logger.info("Docker started on Windows.")
-                return True
-            if os_name == "Linux":
-                subprocess.run(
-                    ["sudo", "systemctl", "start", "docker"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-                logger.info("Docker started on Linux.")
-                return True
-            if os_name == "Darwin":  # macOS
-                subprocess.run(
-                    ["open", "/Applications/Docker.app"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-                logger.info("Docker started on macOS.")
-                return True
-            logger.info(f"Unsupported operating system: {os_name}")
-            return False
-
-        except subprocess.CalledProcessError:
-            logger.exception(f"Error starting Docker on {os_name}")
-            return False
-        except FileNotFoundError:
-            logger.exception("Docker Desktop not found")
-            return False
-        except Exception:
-            logger.exception("An unexpected error occurred")
-            return False
-
-
 def _stream_reader(
     stream: IO[str] | None,
     output_queue: queue.Queue,
@@ -237,19 +170,30 @@ def _stream_reader(
 
 
 # --- Function 2: Start the Subprocess ---
-def _start_subprocess(cmd_list: list[str]) -> subprocess.Popen | None:
+def _start_subprocess(
+    cmd_list: list[str], cwd: str | Path | None = None
+) -> subprocess.Popen | None:
     """Starts the subprocess and handles immediate errors."""
     try:
-        logger.info(f"Running command: {' '.join(cmd_list)}")
+        log_message = f"Running command: {' '.join(cmd_list)}"
+        if cwd:
+            log_message += f" in directory: {cwd}"
+        logger.info(log_message)
+
         return subprocess.Popen(
             cmd_list,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
+            cwd=cwd, # Add the cwd argument here
         )
     except FileNotFoundError:
-        logger.exception(f"Command not found: {cmd_list[0]}")
+        # Check if the CWD is the issue vs. the command itself
+        if cwd and not Path(cwd).is_dir():
+            logger.exception(f"Working directory not found: {cwd}")
+        else:
+            logger.exception(f"Command not found: {cmd_list[0]}")
         return None
     except Exception:
         # Catch other potential Popen errors (permissions, etc.)
@@ -356,12 +300,15 @@ def _ensure_process_terminated(process: subprocess.Popen, context: str) -> None:
 def _execute_and_stream_output(
     cmd_list: list[str],
     suppress_output: bool = False,
+    cwd: str | Path | None = None,
 ) -> int | None:
     """Executes a command, streams its stdout/stderr, and waits for completion.
 
     Args:
         cmd_list: The command and arguments as a list of strings.
         suppress_output: If True, stdout/stderr from the command are not printed.
+        cwd: The working directory for the command. If None, uses the
+             current working directory.
 
     Returns:
         The exit code of the command (int), or None if the process
@@ -370,14 +317,14 @@ def _execute_and_stream_output(
     process: subprocess.Popen | None = None
 
     try:
-        process = _start_subprocess(cmd_list)
+        process = _start_subprocess(cmd_list, cwd)
         if process is None:
             return None
 
-        if process.stdout is not None:
+        if process.stdout is None:
             msg = "Process stdout stream is None"
             raise RuntimeError(msg)
-        if process.stderr is not None:
+        if process.stderr is None:
             msg = "Process stderr stream is None"
             raise RuntimeError(msg)
 
@@ -403,6 +350,7 @@ def run_command(
         cmd_input: str | list[str],
         admin: bool = True,
         suppress_output: bool = False,
+        cwd: str | Path | None = None,
 ) -> bool:
     """Run a command, stream its output in real-time, and handle admin privileges.
 
@@ -416,12 +364,16 @@ def run_command(
         admin: If True, attempt to run the command with admin/root privileges
                using 'sudo' if necessary.
         suppress_output: Whether to supress output or not
+        cwd: The working directory for the command. If None, uses the
+             current working directory of the script.
 
     Returns:
         True if the command executed successfully (exit code 0), False otherwise
         (non-zero exit code, command not found, sudo error, or other exception).
 
     """
+    if platform.system() == "Windows":
+        admin = False
     final_cmd_list = _prepare_command_list(cmd_input, admin)
 
     if final_cmd_list is None:
@@ -429,7 +381,9 @@ def run_command(
         return False
 
     try:
-        exit_code = _execute_and_stream_output(final_cmd_list, suppress_output)
+        exit_code = _execute_and_stream_output(
+            final_cmd_list, suppress_output, cwd
+        )
 
         if exit_code is None:
             # Execution failed to start or encountered a major error

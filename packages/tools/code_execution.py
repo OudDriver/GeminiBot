@@ -2,8 +2,6 @@
 
 import asyncio
 import logging
-import platform
-import subprocess
 import uuid
 
 import docker
@@ -36,82 +34,6 @@ def reply(message: str) -> None:
 
     loop = asyncio.get_running_loop()
     loop.run_until_complete(_reply(message))
-
-
-def start_docker_daemon() -> bool:
-    """Attempt to start the Docker daemon on Windows, Linux, and macOS.
-
-    Returns:
-        bool: True if the Docker daemon appears to have started successfully,
-              False otherwise.  It returns True also if docker is already running
-
-    """
-    os_name = platform.system()
-
-    is_running = False
-    try:
-        if os_name == "Linux":
-            subprocess.run(
-                ["sudo", "docker", "info"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        else:
-            subprocess.run(
-                ["docker", "info"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        logger.info("Docker is already running.")
-        return True
-
-    except subprocess.CalledProcessError:
-        logger.warning("Docker is not running. Attempting to start...")
-
-        try:
-            if os_name == "Windows":
-                docker_desktop_path = (
-                    r"C:\Program Files\Docker\Docker\Docker Desktop.exe"
-                )
-                subprocess.run(
-                    [docker_desktop_path], check=True, capture_output=True, text=True,
-                )
-                logger.info("Docker started on Windows.")
-                is_running = True
-            elif os_name == "Linux":
-                subprocess.run(
-                    ["sudo", "systemctl", "start", "docker"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-                logger.info("Docker started on Linux.")
-                is_running = True
-            elif os_name == "Darwin":  # macOS
-                subprocess.run(
-                    ["open", "/Applications/Docker.app"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-                logger.info("Docker started on macOS.")
-                is_running = True
-            else:
-                logger.info(f"Unsupported operating system: {os_name}")
-
-        except subprocess.CalledProcessError:
-            logger.exception("Error starting Docker on {os_name}.")
-            return False
-        except FileNotFoundError:
-            logger.exception("Docker Desktop not found.")
-            return False
-        except Exception:
-            logger.exception("An unexpected error occurred.")
-            return False
-
-        return is_running
 
 
 def _get_docker_client() -> DockerClient | None:  # noqa: FA102

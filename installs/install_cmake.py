@@ -6,7 +6,7 @@ import platform
 import shutil
 import sys
 
-from install_utils.install_utils import get_distro_info, run_command, setup_logging
+from installs.install_utils.install_utils import get_distro_info, run_command, setup_logging
 
 
 def install_build_essentials_debian() -> bool:

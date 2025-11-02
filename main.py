@@ -9,7 +9,7 @@ from google.genai import Client
 from bot.config import ConfigManager
 # Use the refactored initialization function
 from bot.setup import initialize_temp_config, setup_gemini, setup_logging
-from packages.tools.code_execution import start_docker_daemon
+from packages.utilities.general_utils import start_docker_daemon
 from packages.utilities.file_utils import validate_config_files
 
 
@@ -69,7 +69,7 @@ def main() -> None:
         logger.fatal("Failed to load initial configuration. Bot cannot start.", exc_info=True)
         sys.exit(1)
 
-    start_docker_daemon() # Make sure Docker is running for code execution tools
+    start_docker_daemon()
 
     initialize_temp_config(config.get_all_config()) # Pass the full config dict for defaults
 

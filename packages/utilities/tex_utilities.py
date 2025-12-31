@@ -110,6 +110,7 @@ def split_tex(input_str: str) -> tuple[list[str], bool]:
 
     This supports both inline math ($...$) and display math ($$...$$ or \[...\]).
     It also correctly handles multiline math content.
+    Will ignore dollar signs that is preceded by a backslash.
 
     Args:
         input_str: The input to split.
@@ -119,23 +120,33 @@ def split_tex(input_str: str) -> tuple[list[str], bool]:
         - A list of strings, alternating between normal text and TeX math.
         - A boolean indicating if any TeX math was found.
     """
-    pattern = r"(\$\$.*?\$\$|\\\[.*?\\\]|\$.*?\$)"
+    pattern = r"((?<!\\)\$\$.*?(?<!\\)\$\$|\\\[.*?\\\]|(?<!\\)\$.*?(?<!\\)\$)"
 
     # We use regex.split to keep the delimiters
     parts = regex.split(pattern, input_str, flags=regex.DOTALL)
 
     non_empty_parts = [p for p in parts if p]
-    has_tex = len(non_empty_parts) > 1 or (len(non_empty_parts) == 1 and non_empty_parts[0] != input_str)
+
+    # Determine if math was found (list has more than 1 part, or the single part is a math block)
+    has_tex = len(non_empty_parts) > 1 or (
+        len(non_empty_parts) == 1 and check_tex(non_empty_parts[0])
+    )
 
     return non_empty_parts, has_tex
 
 def check_tex(input_str: str) -> bool:
-    """Checks if a string starts with $ and ends with $.
+    """Checks if a string is a TeX block.
 
     Args:
         input_str: The input string to check.
 
     Returns:
-        A boolean if that string is a
+        A boolean if that string is a TeX block.
     """
-    return input_str.startswith("$") and input_str.endswith("$")
+    if (
+        input_str.startswith(r"\[") and input_str.endswith(r"\]")
+    ) or (
+        input_str.startswith("$") and input_str.endswith("$")
+    ):
+        return True
+    return False

@@ -8,6 +8,7 @@ from pathlib import Path
 from google import genai
 from google.genai.types import HttpOptions, Tool, GoogleSearch, ToolCodeExecution, UrlContext
 
+from packages.tools.genius import get_lyrics
 from packages.tools.internet import make_get_request, get_wikipedia_page, search_duckduckgo
 from packages.tools.memory import save_memory
 from packages.tools.weather import get_weather
@@ -111,6 +112,7 @@ DEFAULT_TOOLS_MAP = {
         execute_code,
         search_duckduckgo,
         save_memory,
+        get_lyrics,
     ],
     "Google Search & Code Execution": [
         Tool(google_search=GoogleSearch()),
